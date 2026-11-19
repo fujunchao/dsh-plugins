@@ -1,0 +1,14 @@
+# dsh-thinking-scroll bundle patch
+#
+# 往 profile 里插一行。纯浏览器侧改造（CSS 限高 + MutationObserver 自动跟随），宿主半只负责在
+# settings 服务可用时注册 "thinking-scroll" 命名空间，让「设置 → 插件」里出现可调的卡片。
+#
+# 行配置（全部可选，取值即 Config schema 的默认值）：
+#   maxHeightVh 40       展开后思考正文的限高，单位视口百分比（Config 限定 20–80）
+#   autoFollow  true     流式输出时自动钉底跟随；手动上滚即暂停，滚回底部恢复
+- insert:
+    - id: thinking-scroll
+      name: 'dsh-thinking-scroll'
+      config:
+        maxHeightVh: 40
+        autoFollow: true

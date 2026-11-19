@@ -1,0 +1,14 @@
+# dsh-model-tuning bundle patch
+#
+# 往 profile 的插件名册里插一行。配置页在「插件」页本插件那一行的「配置」入口
+# （plugins.row.config，key = dsh-model-tuning#model-tuning）。
+#
+# 本插件不导出 Config schema：全部设置放在 ~/.dsh/model-tuning.json，
+# 由插件页读写。这样避免 loader 配置层与插件状态出现两套真源，
+# 也避免再踩「手写 plain schema 导致冷启动崩溃」那个坑。
+#
+# 注意：本行的 config 只是占位；改配置请去插件页，不要在这里加字段。
+- insert:
+    - id: model-tuning
+      name: 'dsh-model-tuning'
+      config: {}

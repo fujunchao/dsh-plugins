@@ -1,0 +1,42 @@
+[
+  {
+    "id": "D1 prefix-48",
+    "chars": 48,
+    "status": 429,
+    "ms": 2153,
+    "snip": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"error\\\": {\\n \\\"code\\\": 429,\\n \\\"message\\\": \\\"Resource h",
+    "retried": true
+  },
+  {
+    "id": "D2 prefix-100",
+    "chars": 100,
+    "status": 429,
+    "ms": 1713,
+    "snip": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"error\\\": {\\n \\\"code\\\": 429,\\n \\\"message\\\": \\\"Resource h",
+    "retried": true
+  },
+  {
+    "id": "D3 prefix-169",
+    "chars": 169,
+    "status": 429,
+    "ms": 2071,
+    "snip": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"error\\\": {\\n \\\"code\\\": 429,\\n \\\"message\\\": \\\"Resource h",
+    "retried": true
+  },
+  {
+    "id": "D4 full-debranded",
+    "chars": 7572,
+    "status": 429,
+    "ms": 1880,
+    "snip": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"error\\\": {\\n \\\"code\\\": 429,\\n \\\"message\\\": \\\"Resource h",
+    "retried": true
+  },
+  {
+    "id": "D5 full-other-persona",
+    "chars": 7543,
+    "status": 429,
+    "ms": 1947,
+    "snip": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"error\\\": {\\n \\\"code\\\": 429,\\n \\\"message\\\": \\\"Resource h",
+    "retried": true
+  }
+]

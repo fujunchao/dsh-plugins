@@ -1,0 +1,25 @@
+# dsh-web-search-multi bundle patch
+#
+# 往 profile 里插一行。插件向 ctx.web 注册 provider id "multi"，接管内置 web_search 的搜索后端；
+# 浏览器半（exports["./client"]）提供「设置 → Web 搜索」页面与回环测试 API。
+#
+# 行配置（都是 Config schema 的默认值，只写中性项；不写个人中转 baseURL 与私有模型名）：
+#   provider          tavily        当前后端：tavily | grok | openai | gemini
+#   tavilyApiKeyEnv   TAVILY_API_KEY    ↓ 四个后端各自的凭据 ref 名，密钥本身放 DSH 凭据库，
+#   grokApiKeyEnv     XAI_API_KEY       不落 profile、不落本文件
+#   openaiApiKeyEnv   OPENAI_API_KEY
+#   geminiApiKeyEnv   GEMINI_API_KEY
+# 各后端 baseURL / model 一律走 Config 默认（官方公共端点），需要中转或换模型时在设置页改。
+#
+# 注意：本文件只插入本插件这一行。要让内置 web 服务改用本 provider，还需在 profile 的 `web` 行
+# 声明 searchProvider: multi（并视情况停用自带的 web-search-deepseek 行）——那是用户自己的行，
+# 不由本 bundle 代改，步骤见 README。
+- insert:
+    - id: web-search-multi
+      name: 'dsh-web-search-multi'
+      config:
+        provider: tavily
+        tavilyApiKeyEnv: TAVILY_API_KEY
+        grokApiKeyEnv: XAI_API_KEY
+        openaiApiKeyEnv: OPENAI_API_KEY
+        geminiApiKeyEnv: GEMINI_API_KEY

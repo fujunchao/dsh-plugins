@@ -1,0 +1,50 @@
+[
+  {
+    "range": "0-1000",
+    "status": 429,
+    "ms": 1804,
+    "body": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"erro"
+  },
+  {
+    "range": "1000-2000",
+    "status": 200,
+    "ms": 8000,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  },
+  {
+    "range": "2000-3000",
+    "status": 200,
+    "ms": 1948,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  },
+  {
+    "range": "3000-4000",
+    "status": 200,
+    "ms": 2843,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  },
+  {
+    "range": "4000-5000",
+    "status": 200,
+    "ms": 9312,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  },
+  {
+    "range": "5000-6000",
+    "status": 200,
+    "ms": 10601,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  },
+  {
+    "range": "6000-7000",
+    "status": 429,
+    "ms": 1780,
+    "body": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n \\\"erro"
+  },
+  {
+    "range": "7000-7564",
+    "status": 200,
+    "ms": 33893,
+    "body": "data: {\"candidates\": [{\"content\": {\"role"
+  }
+]

@@ -1,0 +1,76 @@
+{
+  "name": "dsh-quote-ref",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "DeepSeekRuntime (DSH) plugin: quote selected conversation text into the composer as a compact reference chip, expanding to the full text on send.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek-runtime",
+    "plugin",
+    "quote",
+    "reference",
+    "composer",
+    "client-plugin"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-quote-ref",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-quote-ref"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "ui",
+      "order": 10
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-input-trigger"
+      ]
+    }
+  }
+}

@@ -1,0 +1,7 @@
+node_modules/
+*.tsbuildinfo
+*.tgz
+*.bak-*
+.local/
+dist/
+coverage/

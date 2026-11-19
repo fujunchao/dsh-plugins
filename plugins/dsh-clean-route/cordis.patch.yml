@@ -1,0 +1,16 @@
+# dsh-clean-route bundle patch
+#
+# 往 profile 的插件名册里插一行（纯宿主半，阶段 1 无客户端半）。
+#
+# 行配置（全部可选）：
+#   rulesPath  规则表路径；省略则 ~/.dsh/gemini-clean.yml
+#   watch      是否监听规则表文件热重载（默认 true）
+#
+# 规则表不存在时用内置默认规则（与已验证过的默认行为一致：剔 harness:identity /
+# harness:source / app:web-surface 三 section 与同名两条 runtime context，并把
+# deployment:persona-prefix 换成中性人设）。
+- insert:
+    - id: clean-route
+      name: 'dsh-clean-route'
+      config:
+        watch: true

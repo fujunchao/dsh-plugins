@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DSH 插件集 · 市场索引</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 3rem 1.25rem 5rem;
+        font: 16px/1.7 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      }
+      h1 { font-size: 1.6rem; margin: 0 0 0.35rem; }
+      p.lead { margin-top: 0; opacity: 0.75; }
+      code, pre {
+        font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+        font-size: 0.9em;
+      }
+      pre {
+        padding: 0.9rem 1rem;
+        border-radius: 10px;
+        background: color-mix(in srgb, currentColor 8%, transparent);
+        overflow-x: auto;
+      }
+      ol { padding-left: 1.2rem; }
+      li { margin: 0.35rem 0; }
+      a { color: #4d7cfe; }
+      footer { margin-top: 2.5rem; font-size: 0.9rem; opacity: 0.7; }
+    </style>
+  </head>
+  <body>
+    <h1>DSH 插件集 · 市场索引</h1>
+    <p class="lead">这个站点只做一件事：给 DeepSeekRuntime（DSH）的「发现」页提供一个插件索引。</p>
+
+    <h2>在 DSH 里添加索引源</h2>
+    <ol>
+      <li>打开 <strong>插件</strong> → 实验性插件 → 打开 <strong>自定义插件索引</strong>。</li>
+      <li>切到 <strong>发现</strong> → <strong>添加索引源</strong>，填入下面的地址。</li>
+      <li>搜索插件名 → 打开卡片 → <strong>安装</strong>。</li>
+    </ol>
+    <pre>https://fujunchao.github.io/dsh-plugins/index.json</pre>
+
+    <h2>原始文件</h2>
+    <p>
+      索引 JSON：<a href="index.json">index.json</a><br />
+      插件源码与发版流程：<a href="https://github.com/fujunchao/dsh-plugins">github.com/fujunchao/dsh-plugins</a>
+    </p>
+
+    <footer>索引由仓库 CI 生成，每个版本固定在某个提交上；DSH 只校验格式，不校验声明。</footer>
+  </body>
+</html>

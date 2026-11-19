@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+
+# build output / coverage
+dist/
+coverage/
+
+# local scratch state
+.local/
+.verify/
+.verify2/
+*.bak-*
+*.bak
+
+# editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

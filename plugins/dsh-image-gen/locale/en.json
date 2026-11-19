@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Image generation",
+    "description": "Give the model image generation and editing through any OpenAI-compatible Images endpoint; key, model and size stay configurable."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Multi-backend web search",
+    "description": "Pick the backend behind web_search — Tavily, Grok, OpenAI or Gemini — from one settings page, with keys kept in the credential store."
+  }
+}

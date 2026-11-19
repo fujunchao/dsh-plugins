@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Thinking scroll window",
+    "description": "Long reasoning blocks stay readable: cap the expanded body in a scrollable window, keep the header visible and follow the stream."
+  }
+}

@@ -1,0 +1,21 @@
+# dsh-session-lens bundle patch
+#
+# 往 desktop/web profile 的插件名册里插一行。插件是纯 Host 半（无 client 半、无 router
+# preset、不注入 DOM）：只注册三个模型工具和一段提示词。
+#
+# 行 config（全部可选，缺省见 lib/config.js 的 DEFAULTS）：
+#   redactSecrets          外来内容里的凭据是否打码（默认 true；关掉等于让秘密自由进上下文）
+#   maxReadBytes           单次 session_read 的正文预算，UTF-8 字节（默认 65536）
+#   maxFindResults         一次 session_find 最多返回多少个会话命中（默认 10）
+#   includeSubagentsDefault session_find 是否默认下钻子会话（默认 false；子会话约占总量一半）
+#   maxProjects            一次 session_projects 最多列多少个项目（默认 40）
+#   maxSessionsPerProject  单个项目最多列多少个会话（默认 12）
+#   maxOutlineLines        大纲单次最多多少行（默认 120；超了按步→叙述段→轮次降级）
+#   searchTimeoutMs        session_find 的协作式超时（默认 30000）
+- insert:
+    - id: session-lens
+      name: 'dsh-session-lens'
+      config:
+        redactSecrets: true
+        maxReadBytes: 65536
+        maxFindResults: 10

@@ -1,0 +1,18 @@
+{
+  "url": "https://fujunchao.github.io/dsh-plugins/index.json",
+  "repositoryUrl": "https://github.com/fujunchao/dsh-plugins",
+  "title": {
+    "en": "Fujunchao's DSH plugins",
+    "zh": "付俊超的 DSH 插件集"
+  },
+  "description": {
+    "en": "DeepSeekRuntime (DSH) plugins for the composer, the model layer, sessions, notes and research workflows.",
+    "zh": "面向 DeepSeekRuntime（DSH）的一组插件：输入框、模型层、会话、笔记与研究流程。"
+  },
+  "categories": {
+    "ui": { "title": { "en": "Interface", "zh": "界面" } },
+    "model": { "title": { "en": "Models and providers", "zh": "模型与供应商" } },
+    "tools": { "title": { "en": "Tools and data", "zh": "工具与数据" } },
+    "workflow": { "title": { "en": "Workflows", "zh": "工作流" } }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Vault",
+    "description": "Manage active, archived and trashed DSH sessions in one settings page; trash size is unbounded and permanent purge must be confirmed."
+  }
+}

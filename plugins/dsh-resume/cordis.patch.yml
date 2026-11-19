@@ -1,0 +1,22 @@
+# dsh-resume bundle patch
+#
+# Inserts one row into the profile roster. The Host half (package ".") registers the
+# /dsh-resume/* routes and the followup() continuation; the browser half ("./client")
+# is picked up from package.json `dsh.client` and draws the play button.
+#
+# Row config (all optional — defaults are tuned for the Codex-like feel):
+#   placement        seat | toolbar      where the play button lives (default seat)
+#   includeCompleted false               also offer continue after a clean turn with leftover work
+#   promptLanguage   auto | zh | en      language of the model-facing continuation prompt
+#   maxPromptChars   1200                bound on the interruption detail in the prompt
+#   ignoreErrorCodes []                  error codes that never offer continue
+#   watchErrorCodes  []                  (reserved) error codes that additionally arm auto-resume
+- insert:
+    - id: resume
+      name: 'dsh-resume'
+      config:
+        placement: seat
+        includeCompleted: false
+        promptLanguage: auto
+        maxPromptChars: 1200
+        ignoreErrorCodes: []

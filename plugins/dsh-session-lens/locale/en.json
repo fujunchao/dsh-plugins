@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Lens",
+    "description": "Read-only session browser for the model: list projects, search sessions, read any by step. Cross-project reads need an explicit scope."
+  }
+}

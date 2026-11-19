@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>登录思源原生编辑器</title>
+<style>body{margin:0;background:#f7f8fa;color:#24262b;font:15px/1.65 system-ui}main{max-width:380px;margin:12vh auto;padding:28px;background:white;border:1px solid #ddd;border-radius:12px}h1{font-size:20px;margin:0 0 12px}p{color:#666;font-size:13px}label{display:block;margin-top:12px}input,button{box-sizing:border-box;width:100%;padding:10px;border:1px solid #bbb;border-radius:6px;font:inherit}button{margin-top:18px;background:#1967d2;color:white;border:0;cursor:pointer}button:disabled{opacity:.5}#error{color:#b3261e}#captchaBox{display:none}#captchaImage{display:block;margin:8px 0;cursor:pointer}.remember{display:flex;align-items:center;gap:8px;cursor:pointer}.remember input{width:16px;height:16px;margin:0}</style>
+</head><body><main><h1>登录思源原生编辑器</h1><p>请输入思源的锁屏密码。记住登录后，重启 DSH 也可直接进入；登录凭据会在本机加密保存，最长保留 30 天。</p><form id="login"><label for="password">思源锁屏密码</label><input id="password" name="password" type="password" autocomplete="current-password" required><div id="captchaBox"><label for="captcha">验证码</label><img id="captchaImage" alt="思源验证码"><input id="captcha" autocomplete="off"></div><label class="remember"><input id="rememberMe" type="checkbox" checked>记住登录 30 天</label><div id="error" role="alert"></div><button id="submit" type="submit">登录并继续编辑</button><button id="continue" type="button" hidden>继续编辑</button></form></main>
+<script>/*DSH_BOOT*/
+const boot=window.__DSH_NATIVE__;
+parent.postMessage({source:"dsh-siyuan-native",channel:boot.channel,docId:boot.docId,type:"login-required",payload:{}},boot.parentOrigin==="null"?"*":boot.parentOrigin);
+document.getElementById("captchaImage").onclick=()=>{document.getElementById("captchaImage").src="/__dsh/captcha?t="+Date.now()};
+document.getElementById("continue").onclick=()=>location.reload();
+document.getElementById("login").onsubmit=async event=>{
+  event.preventDefault();
+  const button=document.getElementById("submit");
+  button.disabled=true;
+  document.getElementById("error").textContent="";
+  try{
+    const response=await fetch("/__dsh/login",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({channel:boot.channel,authCode:document.getElementById("password").value,
+        captcha:document.getElementById("captcha").value,rememberMe:document.getElementById("rememberMe").checked})
+    });
+    const result=await response.json();
+    if(result.code===0){
+      document.getElementById("password").value="";
+      if(result.data?.warning){
+        document.getElementById("error").textContent=result.data.warning;
+        button.hidden=true;
+        document.getElementById("continue").hidden=false;
+      }else location.reload();
+      return;
+    }
+    document.getElementById("error").textContent=result.msg||"登录失败";
+    if(result.code===1){document.getElementById("captchaBox").style.display="block";document.getElementById("captchaImage").click()}
+  }catch{document.getElementById("error").textContent="连接失败，请稍后重试"}
+  finally{button.disabled=false}
+};
+</script></body></html>

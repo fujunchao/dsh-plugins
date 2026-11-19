@@ -1,0 +1,44 @@
+[
+  {
+    "id": "V1 dsh-prompt+tools+dshGen+harnessUA",
+    "status": 429,
+    "ms": 3134,
+    "bytes": 76966,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n  }\\n}\\n\",\"type\":\"upstream_error\",\"param\":\"\",\"code\":429}}"
+  },
+  {
+    "id": "V2 carrier+tools+dshGen+harnessUA",
+    "status": 200,
+    "ms": 2212,
+    "bytes": 69362,
+    "snippet": "data: {\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"2\"}]}}], \"usageMetadata\": {\"promptTokenCount\": 14058, \"candidatesTokenCount\": 1, \"totalTokenCount\": 14079, \"thoughtsTokenCount\": 20}, \"modelVersion\": \"gemini-4-hydrogen-sonar\", \"responseId\": \"-Df8ataOIL2dz7IPn4bauAI\"}\n\n"
+  },
+  {
+    "id": "V3 carrier+noTools+dshGen+harnessUA",
+    "status": 200,
+    "ms": 3878,
+    "bytes": 271,
+    "snippet": "data: {\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"2\"}]}}], \"usageMetadata\": {\"promptTokenCount\": 31, \"candidatesTokenCount\": 1, \"totalTokenCount\": 51, \"thoughtsTokenCount\": 19}, \"modelVersion\": \"gemini-4-hydrogen-sonar\", \"responseId\": \"_Tf8avfrNsbVz7IPntCFkQI\"}\n\n"
+  },
+  {
+    "id": "V4 dsh-prompt+tools+dshGen+cleanUA",
+    "status": 429,
+    "ms": 2496,
+    "bytes": 76966,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n  }\\n}\\n\",\"type\":\"upstream_error\",\"param\":\"\",\"code\":429}}"
+  },
+  {
+    "id": "V5 dsh-prompt+tools+plainGen+harnessUA",
+    "status": 429,
+    "ms": 2288,
+    "bytes": 76914,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n  }\\n}\\n\",\"type\":\"upstream_error\",\"param\":\"\",\"code\":429}}"
+  },
+  {
+    "id": "V6 carrier+tools+plainGen+harnessUA",
+    "status": 200,
+    "ms": 4748,
+    "bytes": 69310,
+    "snippet": "data: {\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"2\"}]}}], \"usageMetadata\": {\"promptTokenCount\": 14058, \"candidatesTokenCount\": 1, \"totalTokenCount\": 14076, \"cachedContentTokenCount\": 16742, \"thoughtsTokenCount\": 17}, \"modelVersion\": \"gemini-4-hydrogen-sonar\", \"responseId\": \"ED"
+  }
+]

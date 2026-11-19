@@ -1,0 +1,95 @@
+{
+  "name": "@dsh-external/dsh-research-team",
+  "version": "0.4.7",
+  "description": "深度研究专家团：主理人 + 6 位专家多阶段编排，产出带多源引用的研究报告并写入工作区 reports/。",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "deep-research",
+    "research-report",
+    "multi-agent",
+    "agent-team",
+    "workflow"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-research-team",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-research-team"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build:client": "tsdown",
+    "test": "node --test test/assess.test.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "workflow",
+      "order": 10
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/react": "^18.3.31",
+    "react": "^18.3.1",
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "~4.0.4",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-subagent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0 || ^19.0.0"
+  }
+}

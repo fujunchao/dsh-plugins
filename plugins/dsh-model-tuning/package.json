@@ -1,0 +1,71 @@
+{
+  "name": "dsh-model-tuning",
+  "version": "0.1.1",
+  "description": "模型调校：每个模型的思考等级（含 Gemini xhigh 补丁托管）、新会话默认模型与档位、新会话默认开启智能体团队、换模型时保持档位。",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "model",
+    "provider",
+    "reasoning-effort",
+    "agent-team",
+    "xhigh"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-model-tuning",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-model-tuning"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "docs",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "model",
+      "order": 10
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  }
+}

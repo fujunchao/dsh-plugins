@@ -1,0 +1,75 @@
+{
+  "name": "dsh-siyuan-notes",
+  "version": "0.1.1",
+  "description": "在 DSH Web 左侧栏浏览、搜索并块级编辑自建 SiYuan Note（思源笔记）文档，保存前自动备份到 ~/.dsh/siyuan-backups。",
+  "type": "module",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "siyuan",
+    "siyuan-note",
+    "notes",
+    "markdown",
+    "sidebar",
+    "client-plugin"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-siyuan-notes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-siyuan-notes"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "tools",
+      "order": 10
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

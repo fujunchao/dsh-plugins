@@ -1,0 +1,21 @@
+# dsh-siyuan-notes bundle patch
+#
+# Inserts one row into the desktop/web profile roster. The row starts the Host half
+# (package exports ".") in the DSH Host process; the browser half (exports "./client")
+# is picked up from package.json `dsh.client`.
+#
+# Row config (all optional):
+#   baseUrl         SiYuan kernel address (default http://127.0.0.1:6806 in code)
+#   token           SiYuan API token; leave empty and set it in the panel instead of
+#                   committing it here
+#   timeoutSeconds  per-request timeout (1..300, default 20)
+#
+# Values saved from the panel land in %USERPROFILE%\.dsh\siyuan-notes.json and win over
+# this block, so an upgrade never silently rewrites the user's connection settings.
+- insert:
+    - id: siyuan-notes
+      name: 'dsh-siyuan-notes'
+      config:
+        baseUrl: 'http://127.0.0.1:6806'
+        token: ''
+        timeoutSeconds: 20

@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# local state and scratch files
+.local/
+*.log
+*.tmp
+
+# build output
+dist/
+coverage/

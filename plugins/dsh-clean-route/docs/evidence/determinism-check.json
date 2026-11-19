@@ -1,0 +1,47 @@
+[
+  {
+    "id": "A full-minus-firstline",
+    "len": 7515,
+    "statuses": [
+      429,
+      429,
+      429
+    ]
+  },
+  {
+    "id": "B first-47",
+    "len": 47,
+    "statuses": [
+      429,
+      429,
+      429
+    ]
+  },
+  {
+    "id": "C first-46",
+    "len": 46,
+    "statuses": [
+      200,
+      200,
+      200
+    ]
+  },
+  {
+    "id": "D full",
+    "len": 7564,
+    "statuses": [
+      429,
+      429,
+      429
+    ]
+  },
+  {
+    "id": "E carrier",
+    "len": 24,
+    "statuses": [
+      200,
+      200,
+      200
+    ]
+  }
+]

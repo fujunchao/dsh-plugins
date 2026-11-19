@@ -1,0 +1,42 @@
+[
+  {
+    "range": "0-60",
+    "chars": 60,
+    "status": 429
+  },
+  {
+    "range": "60-120",
+    "chars": 60,
+    "status": 200
+  },
+  {
+    "range": "120-180",
+    "chars": 60,
+    "status": 200
+  },
+  {
+    "range": "180-250",
+    "chars": 70,
+    "status": 200
+  },
+  {
+    "range": "6750-6810",
+    "chars": 60,
+    "status": 200
+  },
+  {
+    "range": "6810-6870",
+    "chars": 60,
+    "status": 200
+  },
+  {
+    "range": "6870-6930",
+    "chars": 60,
+    "status": 200
+  },
+  {
+    "range": "6930-7000",
+    "chars": 70,
+    "status": 200
+  }
+]

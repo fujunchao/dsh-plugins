@@ -1,0 +1,16 @@
+# dsh-quote-ref bundle patch
+#
+# 往 profile 里插一行。宿主半（package "."）是空 apply，只为让这一行可被 Loader 导入；
+# 真正的功能在浏览器半（exports["./client"]），由 package.json 的 dsh.client 声明发现。
+#
+# 行配置（全部可选，也是设置卡默认值）：
+#   maxChars      4000   一条引用最多送给模型多少字符（200–40000，超出截断）；chip 存在
+#                        localStorage 里，别给太大
+#   includeOrigin true    引用块头部是否带「第 N 轮 · 用户/助手」来源后缀
+#   probeUrl      ""      仅诊断用：设置后浏览器半在加载时发一个 GET 探针（默认不发任何网络请求）
+- insert:
+    - id: quote-ref
+      name: 'dsh-quote-ref'
+      config:
+        maxChars: 4000
+        includeOrigin: true

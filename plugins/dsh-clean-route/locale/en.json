@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Clean Route",
+    "description": "Scrubs the system-prompt sections that upstream providers flag as a DSH fingerprint; tool declarations and history pass through untouched."
+  }
+}

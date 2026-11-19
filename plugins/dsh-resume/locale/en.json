@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Resume",
+    "description": "Turns the send button into a clickable Continue after an interrupted turn and resumes with the interruption context, not a bare \"continue\"."
+  }
+}

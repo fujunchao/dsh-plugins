@@ -1,0 +1,60 @@
+{
+  "name": "dsh-session-lens",
+  "version": "0.1.1",
+  "description": "跨项目只读会话浏览（模型工具）：列出项目、跨区检索会话、按轮次与层级阅读正文。",
+  "type": "module",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "session",
+    "cross-workspace",
+    "cross-project",
+    "session-history",
+    "read-only"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-session-lens",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-session-lens"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "docs",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "tools",
+      "order": 20
+    }
+  }
+}

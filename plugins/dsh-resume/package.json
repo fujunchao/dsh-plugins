@@ -1,0 +1,74 @@
+{
+  "name": "dsh-resume",
+  "version": "0.1.1",
+  "description": "会话被中断（报错/限流/进程退出/手动停止/输出截断）后，把输入框右下角的发送键变成可点的「▶ 继续」：一键带着中断现场继续未完成的工作，不用再手打「继续」。",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek-runtime",
+    "plugin",
+    "resume",
+    "continue",
+    "interrupted",
+    "client-plugin"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-resume",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-resume"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "optionalDependencies": {
+    "@deepseek-ai/schemastery": "3.18.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "ui",
+      "order": 20
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
+    }
+  }
+}

@@ -1,0 +1,17 @@
+# dependencies
+node_modules/
+
+# generated plugin index (built by scripts/build-index.mjs and by CI)
+docs/index.json
+docs/icons/
+
+# local scratch state
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.plugin-market-cache/
+
+# editor and tooling
+.vscode/
+.idea/

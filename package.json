@@ -1,0 +1,24 @@
+{
+  "name": "dsh-plugins",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A DSH plugin collection and the plugin market index DSH reads to install it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git"
+  },
+  "scripts": {
+    "build:index": "node scripts/build-index.mjs",
+    "check:index": "node scripts/check-index.mjs",
+    "check:packages": "node scripts/check-packages.mjs",
+    "refresh:vendor": "node scripts/refresh-vendor.mjs",
+    "test": "node scripts/test-all.mjs",
+    "verify": "node scripts/check-packages.mjs && node scripts/test-all.mjs && node scripts/build-index.mjs && node scripts/check-index.mjs",
+    "verify:install": "node scripts/verify-git-install.mjs"
+  },
+  "devDependencies": {
+    "semver": "^7.7.1"
+  }
+}

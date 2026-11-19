@@ -1,0 +1,62 @@
+name: Publish plugin index
+
+# Every push to main validates the packages, builds the format-1 market index pinned to that
+# commit, and deploys docs/ to GitHub Pages. The index is generated, never committed, so it
+# always pins the exact commit it was built from.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install index tooling
+        run: npm install --no-audit --no-fund --ignore-scripts
+
+      - name: Check that every package is releasable
+        run: node scripts/check-packages.mjs
+
+      - name: Run package tests
+        run: node scripts/test-all.mjs
+
+      - name: Build the market index
+        env:
+          INDEX_URL: https://fujunchao.github.io/dsh-plugins/index.json
+        run: node scripts/build-index.mjs --commit "$GITHUB_SHA" --url "$INDEX_URL"
+
+      - name: Validate the index with the DSH validator
+        run: node scripts/check-index.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

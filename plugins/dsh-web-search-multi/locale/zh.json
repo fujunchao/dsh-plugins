@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "多后端联网搜索",
+    "description": "给 web_search 四个可切换后端（Tavily / Grok / OpenAI / Gemini），密钥与端点在一处配置，可一键实测连通性。"
+  }
+}

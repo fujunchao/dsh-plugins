@@ -1,0 +1,50 @@
+[
+  {
+    "id": "B2 persona-debrand-XYZ",
+    "len": 47,
+    "statuses": [
+      429,
+      429
+    ]
+  },
+  {
+    "id": "B3 persona-debrand-spaces",
+    "len": 47,
+    "statuses": [
+      429,
+      429
+    ]
+  },
+  {
+    "id": "A-minus-6000-6250",
+    "len": 7265,
+    "statuses": [
+      429,
+      429
+    ]
+  },
+  {
+    "id": "A-minus-6250-6500",
+    "len": 7265,
+    "statuses": [
+      429,
+      429
+    ]
+  },
+  {
+    "id": "A-minus-6500-6750",
+    "len": 7265,
+    "statuses": [
+      429,
+      429
+    ]
+  },
+  {
+    "id": "A-minus-6750-7000",
+    "len": 7265,
+    "statuses": [
+      200,
+      "ERR"
+    ]
+  }
+]

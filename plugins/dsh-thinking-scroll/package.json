@@ -1,0 +1,78 @@
+{
+  "name": "dsh-thinking-scroll",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Cap expanded reasoning blocks with a scrollable window in the DeepSeekRuntime web chat",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "deepseek-runtime",
+    "plugin",
+    "reasoning",
+    "thinking",
+    "scroll",
+    "client-plugin"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-thinking-scroll",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-thinking-scroll"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "check": "node --check lib/client.js && node --input-type=module --check < lib/index.js",
+    "test": "npm run check && node --test"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "ui",
+      "order": 30
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ]
+    }
+  }
+}

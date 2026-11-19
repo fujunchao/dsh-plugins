@@ -1,0 +1,200 @@
+/**
+ * One-shot subagent dispatch helper: spawn a team member with its persona,
+ * wait for settlement, and return the final assistant text.
+ *
+ * Uses `ctx.subagents.startActivation({ provider: 'spawn', ..., delivery: 'caller' })`
+ * — the DSH 0.2.2 起 only one-shot seam (the old
+ * `ctx.subagents.start('spawn', ...)` was removed in 0.2.1-alpha.1). `delivery:
+ * 'caller'` means the caller receives the result promise instead of a parent
+ * completion notice, which is exactly the previous one-shot semantics.
+ *
+ * `persona` is no longer a start option (0.2.2 removed it from
+ * {@link SubagentStartRequest}); the role persona is prepended to the task text
+ * here. That is behaviorally equivalent for a one-shot member — the persona is
+ * fixed instructions the child reads before its assignment — and avoids
+ * requiring one Agent Preset per role.
+ */
+import type { Context } from '@deepseek-ai/cordis'
+import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
+import { personaFor, type RoleId } from './personas.js'
+
+/** The subset of DSH's subagent service this plugin depends on. */
+export type AppContext = Context & {
+  subagents: {
+    startActivation(spec: {
+      provider: string
+      label: string
+      prompt: { type: 'text'; text: string }[]
+      parent: unknown
+      signal: AbortSignal
+      delivery: 'parent' | 'caller'
+      outputSchema?: Record<string, unknown>
+    }): Promise<{ result: Promise<SubagentResult>; dispose(): Promise<void> }>
+  }
+}
+
+export interface DispatchOpts {
+  parent: unknown
+  signal: AbortSignal
+  role: RoleId
+  label: string
+  task: string
+  forceJson?: boolean
+  outputSchema?: Record<string, unknown>
+  /** Per-member wall-clock budget in ms (default 10 min, 0 = no timeout). */
+  timeoutMs?: number
+}
+
+export interface DispatchResult {
+  ok: boolean
+  text: string
+  structured?: unknown
+  stopReason: string
+  diagnostic?: string
+}
+
+const JSON_NOTE =
+  '\n\n【输出格式强制】你的最终输出必须是单个 JSON 对象（不要 markdown 代码围栏、不要额外说明文字），严格符合给定 schema。'
+
+/** Drop a leading YAML front matter block: the persona files were written as
+ * Agent Preset documents, and once the persona travels inside a prompt the
+ * `name`/`color`/`maxTurns` header is noise. */
+function stripFrontMatter(text: string): string {
+  const match = text.match(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---\r?\n?/)
+  return match ? text.slice(match[0].length) : text
+}
+
+/** Extract the first balanced JSON object from model text (tolerates fences). */
+export function extractJson(text: string): unknown {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/)
+  const candidates = [fenced?.[1], text].filter((t): t is string => typeof t === 'string')
+  for (const c of candidates) {
+    const start = c.indexOf('{')
+    if (start < 0) continue
+    let depth = 0
+    let inStr = false
+    let esc = false
+    for (let i = start; i < c.length; i++) {
+      const ch = c[i]
+      if (esc) {
+        esc = false
+        continue
+      }
+      if (ch === '\\') {
+        esc = true
+        continue
+      }
+      if (ch === '"') inStr = !inStr
+      if (inStr) continue
+      if (ch === '{') depth++
+      if (ch === '}') {
+        depth--
+        if (depth === 0) {
+          try {
+            return JSON.parse(c.slice(start, i + 1))
+          } catch {
+            break
+          }
+        }
+      }
+    }
+  }
+  throw new Error('no parseable JSON object in member output')
+}
+
+/** Default per-member wall-clock budgets — 60 min everywhere (2026-09-26:
+ * the report-publisher was disposed at 30:00.1 mid-output and the report fell
+ * back to degraded assembly, so the user raised the floor to 1 hour).
+ * glm-5.3-flash at max reasoning effort routinely thinks 10+ minutes before
+ * emitting, and long web-research members legitimately run past 30 min. */
+const ROLE_BUDGETS_MS: Record<RoleId, number> = {
+  'topic-researcher': 60 * 60 * 1000,
+  'research-planner': 60 * 60 * 1000,
+  'draft-reviewer': 60 * 60 * 1000,
+  'draft-reviser': 60 * 60 * 1000,
+  'report-writer': 60 * 60 * 1000,
+  'report-publisher': 60 * 60 * 1000,
+  'research-chief-editor': 60 * 60 * 1000,
+}
+
+/** One dispatch attempt (no retry). */
+async function dispatchOnce(ctx: AppContext, opts: DispatchOpts, budgetMs: number): Promise<DispatchResult> {
+  // 角色人格 + 强制 JSON 提示拼进任务正文：人格在前，输出格式要求在最后（最强位置）。
+  const instruction = stripFrontMatter(personaFor(opts.role)).trim()
+  const formatNote = opts.forceJson ? JSON_NOTE : ''
+  const run = await ctx.subagents.startActivation({
+    provider: 'spawn',
+    label: opts.label,
+    prompt: [{ type: 'text', text: `${instruction}\n\n${opts.task}${formatNote}` }],
+    parent: opts.parent,
+    signal: opts.signal,
+    // caller 投递：拿 result 而不发父级完成通知，与旧 start() 的一次性语义一致。
+    delivery: 'caller',
+    ...(opts.outputSchema ? { outputSchema: opts.outputSchema } : {}),
+  })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<'timeout'>((resolve) => {
+    if (Number.isFinite(budgetMs)) timer = setTimeout(() => resolve('timeout'), budgetMs)
+  })
+  try {
+    const settled = await Promise.race([run.result.then(() => 'done' as const), timedOut])
+    if (settled === 'timeout') {
+      void run.dispose().catch(() => {})
+      return { ok: false, text: '', stopReason: 'timeout', diagnostic: `成员 ${opts.label} 超过 ${Math.round(budgetMs / 60000)} 分钟预算，按超时降级处理` }
+    }
+    const result = await run.result
+    // 只取 text 块：result.output 可能携带 reasoning/thinking 块（英文思考过程），
+    // 拼进回传文本会稀释中文占比、引入元话语误判（2026-09-26 冒烟实证）。
+    const text = result.output
+      .map((b) => {
+        if (!b || typeof b !== 'object' || !('text' in b)) return ''
+        const blk = b as { type?: string; text: unknown }
+        if (blk.type !== undefined && blk.type !== 'text') return ''
+        return String(blk.text)
+      })
+      .join('')
+      .trim()
+    return {
+      ok: result.stopReason === 'completed',
+      text,
+      structured: result.structured,
+      stopReason: result.stopReason,
+      ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
+    }
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    void run.dispose().catch(() => {})
+  }
+}
+
+/**
+ * Spawn one member as a one-shot child of `parent`, with the 兜底表's
+ * dispatch-failure rule: an errored spawn settles after ONE retry (timeout
+ * does not retry — the wall-clock budget is already spent).
+ * `task` is the 研究参数卡 + phase-specific assignment text.
+ * A member that exceeds its wall-clock budget settles as
+ * `stopReason: 'timeout'` (the caller's degradation table decides what
+ * happens next); the underlying run is disposed so a stuck request cannot
+ * hold the whole pipeline forever.
+ */
+export async function dispatchMember(ctx: AppContext, opts: DispatchOpts): Promise<DispatchResult> {
+  const budgetMs = opts.timeoutMs === 0
+    ? Number.POSITIVE_INFINITY
+    : (opts.timeoutMs ?? ROLE_BUDGETS_MS[opts.role])
+  const first = await dispatchOnce(ctx, opts, budgetMs).catch((e: unknown) => ({
+    ok: false,
+    text: '',
+    stopReason: 'error',
+    diagnostic: e instanceof Error ? e.message : String(e),
+  }))
+  if (first.ok || first.stopReason === 'timeout') return first
+  // 调度失败重试 1 次（原协议兜底表第一行）
+  const second = await dispatchOnce(ctx, opts, budgetMs).catch((e: unknown) => ({
+    ok: false,
+    text: '',
+    stopReason: 'error',
+    diagnostic: e instanceof Error ? e.message : String(e),
+  }))
+  if (second.ok || second.stopReason !== first.stopReason || second.diagnostic !== first.diagnostic) return second
+  return { ...second, diagnostic: `${second.diagnostic ?? 'dispatch failed'}（已重试 1 次仍失败）` }
+}

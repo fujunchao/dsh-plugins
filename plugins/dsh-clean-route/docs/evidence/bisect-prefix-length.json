@@ -1,0 +1,51 @@
+[
+  {
+    "id": "P0 full no-tools",
+    "chars": 7564,
+    "status": 429,
+    "ms": 2646,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P1 prefix500",
+    "chars": 500,
+    "status": 429,
+    "ms": 2066,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P2 prefix1500",
+    "chars": 1500,
+    "status": 429,
+    "ms": 1744,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P3 prefix3000",
+    "chars": 3000,
+    "status": 429,
+    "ms": 2190,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P4 prefix4500",
+    "chars": 4500,
+    "status": 429,
+    "ms": 1398,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P5 prefix6000",
+    "chars": 6000,
+    "status": 429,
+    "ms": 1334,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  },
+  {
+    "id": "P6 full brand-neutral",
+    "chars": 7592,
+    "status": 429,
+    "ms": 1811,
+    "snippet": "{\"error\":{\"message\":\"Antigravity API Error (已重试 3 次): API Error 429: {\\n  \\\"error\\\": {\\n    \\\"code\\\": 429,\\n    \\\"message\\\": \\\"Resource has been exhausted (e.g. check quota).\\\",\\n    \\\"status\\\": \\\"RESOURCE_EXHAUSTED\\\"\\n "
+  }
+]

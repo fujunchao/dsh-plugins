@@ -1,0 +1,78 @@
+{
+  "name": "dsh-clean-route",
+  "version": "0.1.1",
+  "description": "净化路由：按规则表剔除系统提示词里会被上游识别为 DSH 指纹的段落，工具声明原样透传。",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "prompt",
+    "system-prompt",
+    "gemini",
+    "fingerprint"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-clean-route",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-clean-route"
+  },
+  "bugs": {
+    "url": "https://github.com/fujunchao/dsh-plugins/issues"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "docs",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "test/fixtures/assembly.json"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "probe": "node scripts/probe.mjs",
+    "xhigh": "node scripts/xhigh.mjs",
+    "build-fixture": "node scripts/build-fixture.mjs"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "model",
+      "order": 20
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  }
+}

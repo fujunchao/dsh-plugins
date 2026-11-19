@@ -1,0 +1,15 @@
+# dependencies
+node_modules/
+
+# local scratch state
+*.log
+*.tmp
+*.bak
+*.bak-*
+.local/
+.DS_Store
+Thumbs.db
+
+# build and coverage output
+dist/
+coverage/

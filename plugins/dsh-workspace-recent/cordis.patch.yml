@@ -1,0 +1,15 @@
+# dsh-workspace-recent bundle patch
+#
+# 往 profile 里插一行：宿主半（package "."）只做两件事——
+#   1. 订阅"用户发消息"会话活动，把对应工作区顶到持久顺序的首位；
+#   2. 注册 /sort-projects 斜杠命令，立即整理一次并回报结果。
+#
+# 行配置：
+#   mode  recent | manual   排序方式（默认 recent）
+#         recent = 按最近工作自动排
+#         manual = 完全不碰顺序，拖拽是唯一真相
+- insert:
+    - id: workspace-recent
+      name: 'dsh-workspace-recent'
+      config:
+        mode: recent

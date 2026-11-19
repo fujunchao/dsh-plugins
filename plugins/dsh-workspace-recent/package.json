@@ -1,0 +1,63 @@
+{
+  "name": "dsh-workspace-recent",
+  "version": "0.1.1",
+  "description": "侧边栏的项目（工作区）按最近工作时间自动排序：最近发过消息的项目自己浮到最上面，不用再一个个翻。",
+  "type": "module",
+  "keywords": [
+    "dsh",
+    "deepseek-runtime",
+    "plugin",
+    "workspace",
+    "sidebar",
+    "recent",
+    "order",
+    "sorting"
+  ],
+  "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-workspace-recent",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fujunchao/dsh-plugins.git",
+    "directory": "plugins/dsh-workspace-recent"
+  },
+  "author": {
+    "name": "Fu Junchao"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.2-rc.3 <0.3.0-0"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "docs",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "3.18.5"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "market": {
+      "category": "ui",
+      "order": 40
+    }
+  }
+}
