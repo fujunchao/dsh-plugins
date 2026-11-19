@@ -652,7 +652,8 @@ function sqlString(value) {
 export function imageFileParts(filePath) {
   const raw = typeof filePath === "string" ? filePath.trim() : "";
   if (raw === "") return null;
-  const name = path.basename(raw);
+  // 两种分隔符都认：模型在 Windows 上会传带反斜杠的路径，而宿主也可能跑在 POSIX 上。
+  const name = path.basename(raw.replace(/\\/gu, "/"));
   if (name === "" || name === "." || name === "..") return null;
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 ? name.slice(dot).toLowerCase() : "";

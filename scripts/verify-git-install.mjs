@@ -25,7 +25,13 @@ if (selected.length === 0) {
   process.exit(1)
 }
 
-const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+const pnpmCli =
+  process.env.PNPM_CLI ??
+  path.resolve(path.dirname(process.execPath), 'node_modules', 'pnpm', 'bin', 'pnpm.cjs')
+if (!fs.existsSync(pnpmCli)) {
+  console.error(`verify-git-install: pnpm CLI not found at ${pnpmCli}; set PNPM_CLI to pnpm's bin/pnpm.cjs`)
+  process.exit(1)
+}
 const failures = []
 
 for (const plugin of selected) {
@@ -36,10 +42,10 @@ for (const plugin of selected) {
   console.log(`\n${plugin.name}@${version.version}`)
   console.log(`  spec: ${target.spec}`)
   try {
-    execFileSync(pnpm, ['add', target.spec, '--ignore-scripts', '--reporter=silent'], {
+    // Never go through a shell: the spec contains "&", which cmd.exe would treat as a separator.
+    execFileSync(process.execPath, [pnpmCli, 'add', target.spec, '--ignore-scripts', '--reporter=append-only'], {
       cwd: directory,
       stdio: 'inherit',
-      shell: process.platform === 'win32',
       timeout: 240000,
     })
     const installedFile = path.join(directory, 'node_modules', plugin.name, 'package.json')

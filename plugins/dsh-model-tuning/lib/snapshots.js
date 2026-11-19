@@ -37,12 +37,41 @@ function slug(label) {
   return text.length === 0 ? 'snapshot' : text.slice(0, 40)
 }
 
-/** 目录里所有快照文件名，按时间（文件名前缀）升序。 */
+/**
+ * 同一毫秒里的先后顺序号。
+ *
+ * 文件名前缀只到毫秒；两次结构变更落在同一毫秒时，仅靠时间戳与标签的字典序会排错
+ * （`remove-model` 与 `delete-provider` 同毫秒 → 按字母序会把后者当旧的），撤销点
+ * 就会挑错。这里给每份快照加一个进程内单调递增的五位序号，排序先看时间戳、再看序号。
+ */
+let sequence = 0
+
+/**
+ * 文件名排序键：`[时间戳, 有无限号, 序号, 名字]`。
+ * 老快照（没有序号）排在同一个时间戳里有序号的前面，因为它们一定更早。
+ */
+function orderKey(name) {
+  const sequenced = /^(\d{13})-(\d{5})-/u.exec(name)
+  if (sequenced !== null) return [Number(sequenced[1]), 1, Number(sequenced[2]), name]
+  const legacy = /^(\d{13})-/u.exec(name)
+  if (legacy !== null) return [Number(legacy[1]), 0, 0, name]
+  return [0, 0, 0, name]
+}
+
+/** 目录里所有快照文件名，按（时间戳，序号）升序。 */
 function files(directory) {
   try {
     return readdirSync(directory)
       .filter((name) => name.endsWith('.json'))
-      .sort()
+      .sort((left, right) => {
+        const a = orderKey(left)
+        const b = orderKey(right)
+        for (let index = 0; index < a.length; index += 1) {
+          if (a[index] < b[index]) return -1
+          if (a[index] > b[index]) return 1
+        }
+        return 0
+      })
   } catch {
     return []
   }
@@ -73,9 +102,11 @@ export function createSnapshots(directory = snapshotDir(), options = {}) {
     capture(providers, label, after = null) {
       const at = new Date()
       const stamp = String(at.getTime()).padStart(13, '0')
-      const base = `${stamp}-${slug(label)}`
+      sequence += 1
+      const order = String(sequence % 100000).padStart(5, '0')
+      const base = `${stamp}-${order}-${slug(label)}`
       ensure()
-      // 同一毫秒里连着两次结构变更会撞名：撞到就加序号，别让后一份覆盖前一份。
+      // 撞名（同一毫秒、同一序号，例如两个进程）就加序号，别让后一份覆盖前一份。
       let name = `${base}.json`
       for (let index = 1; existsSync(join(directory, name)); index += 1) {
         name = `${base}-${index}.json`

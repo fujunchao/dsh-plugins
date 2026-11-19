@@ -39,8 +39,34 @@ test('同一个标签连着存两份不会互相覆盖（文件名撞车要加�
   assert.deepEqual(snapshots.latest().providers, { b: { api: 'openai-completions' } })
 })
 
-test('list 新的在前，且能带出时间与标签', () => {
+test('同一毫秒里的快照按捕获顺序排，不按标签字母序（latest 必须是最新那次）', () => {
   const dir = tmp()
+  const snapshots = createSnapshots(dir)
+  const RealDate = Date
+  const frozen = 1795081690123
+  class FrozenDate extends RealDate {
+    constructor(...args) {
+      super(...(args.length === 0 ? [frozen] : args))
+    }
+
+    static now() {
+      return frozen
+    }
+  }
+  globalThis.Date = FrozenDate
+  try {
+    snapshots.capture({ 'relay-x': { api: 'openai-completions', models: [{ id: 'gpt-x' }] } }, 'remove-model')
+    snapshots.capture({}, 'delete-provider')
+  } finally {
+    globalThis.Date = RealDate
+  }
+  // 字母序会把它排反：delete-provider < remove-model。
+  assert.equal(snapshots.latest().label, 'delete-provider')
+  assert.deepEqual(snapshots.latest().providers, {})
+  assert.deepEqual(snapshots.list().map((entry) => entry.label), ['delete-provider', 'remove-model'])
+})
+
+test('list 新的在前，且能带出时间与标签', () => {  const dir = tmp()
   const snapshots = createSnapshots(dir)
   snapshots.capture({ a: {} }, 'first')
   snapshots.capture({ b: {} }, 'second')

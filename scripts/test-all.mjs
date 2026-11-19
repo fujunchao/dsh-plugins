@@ -12,7 +12,8 @@ const pluginsRoot = path.join(root, 'plugins')
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const MISSING_MODULE = /Cannot find module|Cannot find package|ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND/u
 // A test script whose runner binary comes from node_modules (vitest, tsx, ...) fails this way.
-const MISSING_TOOL = /is not recognized as an internal or external command|command not found|: not found$/u
+const MISSING_TOOL = /is not recognized as an internal or external command|command not found|^\s*sh: \d+: .*: not found\s*$/mu
+const failuresDir = path.join(root, '.test-failures')
 
 const packages = fs
   .readdirSync(pluginsRoot, { withFileTypes: true })
@@ -57,13 +58,21 @@ for (const line of passed) console.log(`passed  ${line}`)
 for (const line of skipped) console.log(`skipped ${line}`)
 for (const { directory, output } of failed) {
   console.error(`\nFAILED ${directory}`)
-  console.error(
-    output
-      .split('\n')
-      .slice(-25)
-      .map((line) => `  ${line}`)
-      .join('\n'),
-  )
+  const failing = output.split('\n').filter((line) => /^\s*not ok |^\s*✖ /u.test(line))
+  for (const line of failing.slice(0, 15)) console.error(`  ${line.trim()}`)
+  if (failing.length === 0) {
+    console.error(
+      output
+        .split('\n')
+        .slice(-25)
+        .map((line) => `  ${line}`)
+        .join('\n'),
+    )
+  }
+  fs.mkdirSync(failuresDir, { recursive: true })
+  const logFile = path.join(failuresDir, `${directory.replace(/[^a-z0-9._-]/giu, '_')}.log`)
+  fs.writeFileSync(logFile, output)
+  console.error(`  full log: ${path.relative(root, logFile)}`)
 }
 console.log(`\ntest-all: ${passed.length} passed, ${skipped.length} skipped, ${failed.length} failed`)
 if (failed.length > 0) process.exit(1)
