@@ -391,6 +391,12 @@ export function createMemorySessions(options) {
     // 新消息，refreshRecall 会按旧 key 提前返回，若这里无条件追加就会把上一轮的召回
     // 当成这一轮的相关记忆发给模型（实测：用户说「已经完成重启」，提示里还挂着上一轮
     // 关于自动蒸馏的条目）。文本不一致就丢弃，等下一次 refreshRecall 重查。
+    // v9：召回连续失败要说出来——否则「没有相关记忆」和「召回坏了」在模型眼里没区别。
+    // 成功一次就清零，所以这条只在真的坏掉时出现，不是每轮都念一遍。
+    if (state.recall.failures >= 2) {
+      const reason = String(state.recall.lastError ?? '').trim();
+      lines.push('[记忆] 被动召回连续失败 ' + state.recall.failures + ' 次' + (reason ? '（' + reason.slice(0, 80) + '）' : '') + '；本轮可能漏掉相关记忆，需要时请用 memory_search 主动查。');
+    }
     const humanText = lastHumanText(state.agent);
     if (humanText && humanText === state.recall.text) lines.push(...state.recall.lines);
     else if (state.recall.lines.length) state.recall.lines = [];

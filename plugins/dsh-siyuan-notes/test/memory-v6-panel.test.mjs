@@ -296,13 +296,13 @@ test('P1-3：面板不再请求死参数 refresh=1', async () => {
   assert.equal(/[?&]refresh=1/u.test(code), false, 'client 仍在请求 /memory?refresh=1（宿主没有这个分支）');
 });
 
-test('契约版本：GET /siyuan/memory 报 memoryContractVersion=7', async () => {
+test('契约版本：GET /siyuan/memory 报 memoryContractVersion=10', async () => {
   // 全仓此前没有断言版本号的地方（grep memoryContractVersion 只命中实现与文档），
   // 版本升到 6 却没测试盯着，很容易在后续改动里被悄悄改回去。
   const p = await boot();
   try {
     const info = await p.request(undefined, '/siyuan/memory', 'GET');
     assert.equal(info.status, 200, JSON.stringify(info.body));
-    assert.equal(info.body.value.memoryContractVersion, 7);
+    assert.equal(info.body.value.memoryContractVersion, 10);
   } finally { await p.close(); }
 });

@@ -91,6 +91,14 @@ function fakeKernel(options = {}) {
         const block = state.blocks.find(block => block.id === payload.id);
         if (block) Object.assign(block.attrs, payload.attrs);
         return { ok: true, value: { code: 0, data: null } };
+      }      // v10：memory_read 一次批量写引用计数（真实内核有这个接口，空数组 no-op 已实测）。
+      case "/api/attr/batchSetBlockAttrs": {
+        for (const item of payload.idAttrs ?? []) {
+          state.attrCalls.push({ id: item.id, attrs: item.attrs });
+          const block = state.blocks.find(block => block.id === item.id);
+          if (block) Object.assign(block.attrs, item.attrs);
+        }
+        return { ok: true, value: { code: 0, data: null } };
       }
       case "/api/attr/getBlockAttrs": return { ok: true, value: { code: 0, data: { ...state.blocks.find(block => block.id === payload.id)?.attrs } } };
       case "/api/block/getBlockInfo": return { ok: true, value: { code: 0, data: { box: state.notebooks[0]?.id } } };
@@ -356,8 +364,9 @@ test("buildFtsSearchStatement 转义检索词与过滤值", () => {
 });
 
 test("buildFtsSearchStatement 夹紧 limit", () => {
+  // v9：上限放行 +1，search() 用它多取一条判断「结果是否被截断」。
   const over = buildFtsSearchStatement({ box: "b", expression: "x", limit: 9999 });
-  assert.ok(over.trimEnd().endsWith("LIMIT 25;"));
+  assert.ok(over.trimEnd().endsWith("LIMIT " + (MEMORY_LIMITS.maxSearchLimit + 1) + ";"), over.trimEnd().slice(-20));
   const under = buildFtsSearchStatement({ box: "b", expression: "x", limit: 0 });
   assert.ok(under.trimEnd().endsWith("LIMIT 1;"));
 });
@@ -1142,7 +1151,7 @@ test("checkup 在空记忆上给出空报告而不是报错", async () => {
   const kernel = fakeKernel({ notebooks: READY });
   const store = createMemoryStore({ call: kernel.call, now: FIXED_NOW });
   const report = (await store.checkup()).value;
-  assert.deepEqual(report, { complete: true, scannedLimit: 200, total: 0, active: 0, duplicates: [], similar: [], staleStates: [], brokenChains: [], archiveCandidates: [], topicDrift: [] });
+  assert.deepEqual(report, { complete: true, scannedLimit: 200, total: 0, active: 0, duplicates: [], similar: [], staleStates: [], brokenChains: [], archiveCandidates: [], multiStateProjects: [], incomplete: [], libraryTotal: 0 });
 });
 
 test("sectionText 截断过长的单条，避免挤爆预算", async () => {

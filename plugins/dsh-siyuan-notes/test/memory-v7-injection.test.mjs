@@ -50,7 +50,7 @@ test('条目行只留主题与可信度：组头已经有项目名', async () =>
     await write(fixture.store, { type: 'fact', body: '未标可信度的事实' });
     const text = await section(fixture);
     // state：只有主题（stated 不写标签）；verified 事实：只有可信度；默认可信度：连方括号都没有。
-    assert.match(text, /待办：\n- p\n  - \[task-a\] 当前任务进度/u, text);
+    assert.match(text, /当前状态：\n- p\n  - \[task-a\] 当前任务进度/u, text);
     // 事实类的排序由 refcount/时间决定，这里只关心行格式，不锁顺序。
     assert.ok(text.includes('踩过的坑与事实：\n- p\n'), text);
     assert.ok(text.includes('  - [verified] 已核实的坑'), text);
@@ -99,5 +99,37 @@ test('候选摘要格式不变（它只有 2 条，不参与项目分组）', as
     const text = await section(fixture);
     assert.match(text, /候选（未核实）：\n- \[p \| inferred\] 也许改用 WAL/u, text);
     assert.match(text, /最近决策：\n- p\n  - 已经生效的决定/u, text);
+  } finally { fixture.close(); }
+});
+
+test('v8：项目清单最多列 6 个，超出按个数折叠，绝不切出半截项目名', async () => {
+  const fixture = memorySqlKernel();
+  try {
+    const names = Array.from({ length: 9 }, (_, index) => 'proj-' + index);
+    const wide = { workspace: '/w/root', project: '*', projects: ['*', ...names], projectRoots: {} };
+    const text = await fixture.store.sectionText({ scope: wide, force: true });
+    assert.match(text, /^当前项目：proj-0 \/ proj-1 \/ proj-2 \/ proj-3 \/ proj-4 \/ proj-5 等 3 个；通用内容填 \*。$/mu, text);
+    assert.equal(/proj-[6-8]/u.test(text), false, '超出 6 个的项目不逐个列名：' + text);
+    assert.equal(/等 3 个/u.test(text), true, text);
+  } finally { fixture.close(); }
+});
+
+test('v8：超长主题与候选摘要补省略号，不留没有省略号的半句', async () => {
+  const fixture = memorySqlKernel();
+  try {
+    const longTopic = '很长的任务主题'.repeat(6);
+    await write(fixture.store, { type: 'state', topic: longTopic, body: stateBody('进度结论') });
+    await write(fixture.store, { type: 'decision', confidence: 'inferred', body: '这是一条很长的推断结论'.repeat(8) });
+    const text = await section(fixture);
+    const badgeLine = text.split('\n').find(line => line.startsWith('  - [') && line.includes('…]'));
+    assert.ok(badgeLine, '主题徽标要带省略号：' + text);
+    const inner = badgeLine.slice(badgeLine.indexOf('[') + 1, badgeLine.indexOf(']'));
+    assert.ok(inner.endsWith('…'), '徽标必须以省略号结束：' + inner);
+    assert.ok([...inner].length <= 23, '徽标不超过 23 字：' + [...inner].length);
+    assert.equal(inner.includes(longTopic), false, '不能把 42 字的主题整个塞进去：' + inner);
+    const candidate = text.split('\n').find(line => line.startsWith('- [' + project + ' | inferred]'));
+    assert.ok(candidate, text);
+    assert.ok(candidate.endsWith('…'), '候选摘要截断也要带省略号：' + candidate);
+    assert.ok(text.length <= MEMORY_LIMITS.sectionMaxChars, '总长仍守 1500：' + text.length);
   } finally { fixture.close(); }
 });

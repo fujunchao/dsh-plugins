@@ -20,6 +20,15 @@ export function memoryKernel() {
       const id = nextId(); blocks.set(id, { id, body: payload.data, attrs: {} });
       return ok([{ doOperations: [{ id }] }]);
     }
+    // v10：一次批量写引用计数（真实内核有这个接口，空数组 no-op 已实测过）。
+    if (api.endsWith('/batchSetBlockAttrs')) {
+      if (state.failAttrs) return { ok: true, value: { code: -1, msg: '模拟属性失败' } };
+      for (const item of payload.idAttrs ?? []) {
+        const block = blocks.get(item.id);
+        if (block) Object.assign(block.attrs, item.attrs);
+      }
+      return ok(null);
+    }
     if (api.endsWith('/setBlockAttrs')) {
       if (state.failAttrs) return { ok: true, value: { code: -1, msg: '模拟属性失败' } };
       const block = blocks.get(payload.id);

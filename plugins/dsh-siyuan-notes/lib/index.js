@@ -652,8 +652,7 @@ function sqlString(value) {
 export function imageFileParts(filePath) {
   const raw = typeof filePath === "string" ? filePath.trim() : "";
   if (raw === "") return null;
-  // 两种分隔符都认：模型在 Windows 上会传带反斜杠的路径，而宿主也可能跑在 POSIX 上。
-  const name = path.basename(raw.replace(/\\/gu, "/"));
+  const name = path.basename(raw);
   if (name === "" || name === "." || name === "..") return null;
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 ? name.slice(dot).toLowerCase() : "";
@@ -1036,7 +1035,7 @@ export function createImageInsertTool(deps) {
             },
             value: {
               type: "string",
-              description: "kind=path 时是文件绝对路径（如 ~/Pictures/cover.png）；kind=asset 时是资源相对路径（如 assets/cover.png）。",
+              description: "kind=path 时是文件绝对路径（Windows 上写完整盘符路径，例如 Pictures 目录里的 cover.png）；kind=asset 时是资源相对路径（如 assets/cover.png）。",
             },
           },
           required: ["kind", "value"],
@@ -1481,19 +1480,6 @@ export function createSiYuanRoutes(options = {}) {
             sendJson(res, approved.ok ? 200 : 400, approved);
             return;
           }
-          if (action === "collapse-topic-drift") {
-            // 面板体检页的「只保留最新」：把同 project+workspace 下比 keepId 更旧的 active state
-            // 一次性标成「已被取代」。规则全在存储层（lib/memory.js:collapseTopicDrift），路由只转发。
-            // noDrift 是幂等结果（连点两次、或已经收敛过）→ 200，不当作错误。
-            const collapsed = await store.collapseTopicDrift({
-              project: typeof body.project === "string" ? body.project : undefined,
-              workspace: typeof body.workspace === "string" ? body.workspace : undefined,
-              keepId: typeof body.keepId === "string" ? body.keepId : "",
-              expectedRevision: typeof body.expectedRevision === "string" ? body.expectedRevision : undefined,
-            });
-            sendJson(res, collapsed.ok ? 200 : 400, collapsed);
-            return;
-          }
           if (action === 'recover' || action === 'cleanup-receipts') {
             const result = action === 'recover' ? await store.recoverReceipt({ key: body.key, action: body.operation, expectedVersion: body.expectedVersion, confirmedMissing: body.confirmedMissing }) : await store.cleanupReceipts();
             sendJson(res, result.ok ? 200 : 400, result); return;
@@ -1513,7 +1499,7 @@ export function createSiYuanRoutes(options = {}) {
             return;
           }
           if (status === undefined) {
-            sendJson(res, 400, fail("invalid_action", "action 只支持 approve / revoke / restore / supersede / reproject / collapse-topic-drift"));
+            sendJson(res, 400, fail("invalid_action", "action 只支持 approve / revoke / restore / supersede / reproject"));
             return;
           }
           const patched = await store.setStatus({
@@ -1565,14 +1551,34 @@ export function createSiYuanRoutes(options = {}) {
         }
 
         if (search.get("view") === "entries") {
-          const listed = await store.list({
-            scope: readScope,
-            type: search.get("type") ?? undefined,
-            project: search.get("project") ?? undefined,
-            status: search.get("status") ?? undefined,
-            limit: search.get("limit") ?? undefined,
-          });
-          sendJson(res, listed.ok ? 200 : 503, listed);
+          const status = search.get("status") ?? undefined;
+          const [listed, counts] = await Promise.all([
+            store.list({
+              scope: readScope,
+              type: search.get("type") ?? undefined,
+              project: search.get("project") ?? undefined,
+              status,
+              limit: search.get("limit") ?? undefined,
+              offset: search.get("offset") ?? undefined,
+            }),
+            store.statusCounts(),
+          ]);
+          if (listed.ok !== true) { sendJson(res, 503, listed); return; }
+          // v10：候选不再被 200 条窗口藏掉——不带 status 时单独带一批（最老的在前，先处理积压）。
+          // 候选只在第一页带：翻页时重复带一份没有意义，也会让面板重复渲染候选区块。
+          const firstPage = (search.get("offset") ?? "0") === "0";
+          const candidates = status === undefined && firstPage ? await store.list({ status: "candidate", limit: 20, order: "oldest" }) : null;
+          sendJson(res, 200, succeed({
+            ...listed.value,
+            byStatus: counts.ok === true ? counts.value : { active: 0, candidate: 0, superseded: 0, revoked: 0 },
+            ...(candidates !== null && candidates.ok === true ? { candidates: candidates.value.entries } : {}),
+          }));
+          return;
+        }
+
+        if (search.get("view") === "scopes") {
+          const listed = await store.scopes();
+          sendJson(res, listed.ok === true ? 200 : 503, listed);
           return;
         }
 
@@ -1581,9 +1587,10 @@ export function createSiYuanRoutes(options = {}) {
         if (!catalogued.ok) { sendJson(res, 503, catalogued); return; }
         const section = state?.section ?? '';
         sendJson(res, 200, succeed({
-          // 7 = 2026-11-11 契约 v7：在 v6 基础上，主题漂移可一键收敛（POST action='collapse-topic-drift'）、
-          // 召回命中项已在常驻索引时给一行「索引内」提示、常驻注入按项目分组（项目名只写一次）。
-          memoryContractVersion: 7,
+          // 10 = 2026-11-19 契约 v10：同主题候选确认时一并作废、候选不再被 200 条窗口藏掉（candidates/byStatus）、
+          // entries 支持 offset 分页、新增 view=scopes；memory_read 受「记录已关闭」约束且一次批量写计数；
+          // reconcile 用一条 SQL 对账（20 个 id 从 40 次请求降到 1–2 次）；写入回执带落点。
+          memoryContractVersion: 10,
           catalog: catalogued.value.catalog, box: catalogued.value.box, availability: catalogued.value.availability,
           ring: store.peekRing().length, section, sectionChars: section.length,
           sessionId: state?.sessionId ?? null,
@@ -1944,6 +1951,11 @@ export function writeRender(args, value) {
   const lines = [`${result}（${kind} · ${args?.project ?? "当前项目"}）：${firstLine(args?.text)}`];
   if (Array.isArray(value?.superseded) && value.superseded.length > 0) {
     lines.push(`已把 ${value.superseded.length} 条旧记忆标记为「已被取代」：${value.superseded.join("、")}`);
+  }  // v10：落点写清楚——落点隐式时同一件事会存两份，换个 cwd 就读不到。
+  if (value?.placement) {
+    const reason = value.placement.global ? "显式全局" : ({ explicit: "指定项目", current: "当前项目" }[value.placement.reason] ?? value.placement.reason ?? "");
+    const where = value.placement.global ? "所有工作区" : (value.placement.workspace || "未绑定工作区");
+    lines.push(`落点：${value.placement.project ?? "*"} @ ${where}（${reason}）`);
   }
   lines.push(`id ${value?.id ?? "?"}　要改请到思源的「AI 记忆体」笔记本，要撤销请打开侧栏「记忆体」面板。`);
   if (value?.status === 'candidate') lines.push('候选（推断）不进常驻记忆条目，只在候选摘要里列最多 2 条；要它生效，用 confidence=stated 或 verified 重新写入。');
@@ -1964,6 +1976,17 @@ export function writeRender(args, value) {
  * @param {Record<string, any>} value
  * @returns {Array<{ type: "text", text: string }>}
  */
+/** 检索行里的日期：同年 MM-DD，跨年 YY-MM-DD。 */
+const searchStamp = (created) => {
+  const value = String(created ?? "");
+  if (!/^\d{8}/u.test(value)) return "";
+  const year = value.slice(0, 4);
+  const monthDay = value.slice(4, 6) + "-" + value.slice(6, 8);
+  return year === String(new Date().getFullYear()) ? monthDay : year.slice(2) + "-" + monthDay;
+};
+/** 检索行里的可信度：verified=已核实，inferred=推断，stated（用户明确说的）是默认值，不写。 */
+const confidenceLabel = (confidence) => (confidence === "verified" ? "已核实" : confidence === "inferred" ? "推断" : "");
+
 export function searchRender(args, value) {
   if (value?.ok === false) return [{ type: "text", text: `记忆检索失败：${value.error?.message ?? "未知错误"}` }];
   const results = Array.isArray(value?.results) ? value.results : [];
@@ -1971,7 +1994,7 @@ export function searchRender(args, value) {
     return [{ type: "text", text: `本次检索未找到与「${args?.query ?? ""}」相关的记忆；不能据此认定从未记录。` }];
   }
   const lines = [`命中 ${results.length} 条记忆：`];
-  if (value.complete === false) lines.push(`结果不完整：${value.warning ?? "仅缓存可用"}`);
+  if (value.complete === false) lines.push(`结果被截断：只列出前 ${results.length} 条${value.warning ? `（${value.warning}）` : ""}；可以缩小范围或传更大的 limit。`);
   for (const entry of results) {
     const id = typeof entry.id === "string" ? entry.id : "";
     if (id === "") {
@@ -1984,8 +2007,11 @@ export function searchRender(args, value) {
     // 一条记忆只占一行：结论截到 80 字，免得超长条目把别的命中项挤出视野。
     const statement = firstLine(entry.statement, 80);
     // 项目为空时只写主题，避免拼出 "/主题" 这种半截路径。
-    const location = [entry.project, entry.topic].filter((item) => typeof item === "string" && item !== "").join("/");
-    const marks = [entry.type, location, entry.status].filter((item) => typeof item === "string" && item !== "").join(" · ");
+    const location = [entry.project, entry.topic ? firstLine(entry.topic, 24) : ""].filter((item) => typeof item === "string" && item !== "").join("/");
+    // v9：补日期与可信度——「三天前」和「三个月前」的区别，决定这条还作不作数；
+    // 状态也让位给这两项（active 是默认值，不写）。
+    const marks = [entry.type, location, entry.status === "active" ? "" : entry.status, searchStamp(entry.created), confidenceLabel(entry.confidence)]
+      .filter((item) => typeof item === "string" && item !== "").join(" · ");
     lines.push(`- ${id} [${marks}] ${statement}${entry.fresh ? "（刚写入）" : ""}`);
   }
   if (args?.query === undefined) lines.push("（这是按类型/项目浏览的结果；要精确找请给 query。）");
@@ -2092,7 +2118,19 @@ export function distillRender(_args, value) {
     return [{ type: "text", text: `记忆整理未完成：${value.reason ?? value.error?.message ?? "未知原因"}` }];
   }
   if (!Array.isArray(value?.entries) || value.entries.length === 0) {
-    const lines = ["这次会话里没有找到值得长期记住的新东西（没有写入任何条目）。"];
+    // v8：三种「根本没跑」不能再冒充「没有值得记的」——用户会以为整理过了、本轮结论已存好。
+    const reason = typeof value?.reason === "string" ? value.reason : "";
+    const lines = [
+      reason === "没有新增内容"
+        ? "自上次整理以来没有新的对话内容，这次没有运行（没有写入任何条目）。"
+        : reason === "cooldown"
+          ? "距上次自动整理不足 10 分钟（冷却中），这次没有运行；稍后再让我整理即可。"
+          : reason === "子代理不自动整理"
+            ? "子代理会话不自动整理记忆；请在主会话里调用 memory_distill。"
+            : reason
+              ? "这次没有写入条目（原因：" + reason + "）。"
+              : "这次会话里没有找到值得长期记住的新东西（没有写入任何条目）。",
+    ];
     appendDistillNotes(lines, value);
     return [{ type: "text", text: lines.join("\n") }];
   }
@@ -2344,7 +2382,8 @@ export function apply(ctx, config) {
           description:
             "在长期记忆体里检索：跨会话的项目决策、已经踩过并修好的坑、用户偏好、各项目当前状态。" +
             "当用户提到以前的工作、或你需要确认某件事是否已经定过、是否踩过某个坑、用户的偏好是什么时调用。" +
-            "默认搜索当前项目及全局。每条结果一行，行首是条目 id，后面是「类型 · 项目（含任务主题）· 状态」和结论；" +
+            "默认搜索当前项目及全局。每条结果一行，行首是条目 id，后面是「类型 · 项目（含任务主题）· 日期 · 可信度」和结论；" +
+            "query 可以是整句中文（超过 6 字会按二元组展开），也可以用空格分词；整句查询按相关度排序，短关键词按当前项目与时间排。" +
             "这个 id 可以直接传给 memory_read 取全文。需要明确查其他项目时传 allProjects。" +
             "未命中只代表本次检索没有找到；不可用时无法确认。候选尚未经核实，不能当作既定事实。",
           parameters: {
@@ -2352,7 +2391,7 @@ export function apply(ctx, config) {
             properties: {
               query: {
                 type: "string",
-                description: "检索词，中文短语即可。每个词至少 2 个字；单字会命中过多，请用更长的词。",
+                description: "检索词。可以给整句中文（会把词拆成二元组查），也可以给几个关键词（空格分开）；每个词至少 2 个字。",
               },
               type: {
                 type: "string",
@@ -2430,7 +2469,11 @@ export function apply(ctx, config) {
           execute: async (args, execution) => {
             const invalid = rejectUnknownArgs("memory_read", args, ["ids"]);
             if (invalid) return invalid;
-            const result = await memory.read(args?.ids);
+            const agent = execution?.agent;
+            // v10：读计数也要受「记录已关闭」约束，否则关掉记录后 memory_read 还在改库。
+            const result = await memory.read(args?.ids, {
+              canWrite: () => !execution?.signal?.aborted && memorySessions.recording(agent),
+            });
             memorySessions.watch(execution?.agent, result?.value?.entries?.map(entry => entry.id));
             if (result.ok !== true) return { ok: false, error: result.error };
             // 复核已下线：这些字段对模型没有用，只会占上下文。
@@ -2510,10 +2553,15 @@ export function apply(ctx, config) {
               source: agent?.session?.id ? 'session:' + agent.session.id : 'tool:memory_write',
             });
             if (!result.ok) return result;
+            // v10：回执写清落点（显式传 project / 用当前项目 / 全局）。
+            const placement = {
+              ...(result.value?.placement ?? { project: '*', workspace: '', global: false }),
+              reason: args?.global === true ? 'global' : (typeof args?.project === 'string' && args.project.trim() !== '' ? 'explicit' : 'current'),
+            };
             memorySessions.wrote(agent);
             return result.value.status === 'candidate'
-              ? { ok: true, ...result.value, nextStep: '这条按 inferred（推断）存为候选，不进常驻记忆条目（只在候选摘要里列最多 2 条）；要它生效就用 confidence=stated / verified 把同样的正文再写一次。' }
-              : { ok: true, ...result.value };
+              ? { ok: true, ...result.value, placement, nextStep: '这条按 inferred（推断）存为候选，不进常驻记忆条目（只在候选摘要里列最多 2 条）；要它生效就用 confidence=stated / verified 把同样的正文再写一次。' }
+              : { ok: true, ...result.value, placement };
           },
         }),
       "dsh-siyuan-notes: memory_write",

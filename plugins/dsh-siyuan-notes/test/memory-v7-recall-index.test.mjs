@@ -50,7 +50,7 @@ test('B：最强命中在常驻索引里时，提示补一行带 id 的「索引
     assert.match(hint, /\[相关记忆\]/u);
     // 索引外的先排，索引内的补在后面。
     assert.equal(bullets(hint).length, 2, hint);
-    assert.match(hint, new RegExp('- ' + fresh[0].id + ' \\[决策·p · active · 2026-11-09\\] 新结论丁', 'u'));
+    assert.match(hint, new RegExp('- ' + fresh[0].id + ' \\[决策·p · 11-09\\] 新结论丁', 'u'));
     const indexLine = bullets(hint).find(line => line.includes('索引内'));
     assert.ok(indexLine, '必须有「索引内」行：' + hint);
     assert.ok(indexLine.includes(indexed[0].id), '索引内行要带 id：' + indexLine);
@@ -68,7 +68,7 @@ test('B：全部命中都在索引外时格式不变（仍是 recallLine），�
     const hint = f.sessions.context({ agent: f.agent });
     assert.equal(bullets(hint).length, 3, '最多 3 行：' + hint);
     assert.ok(!hint.includes('索引内'), hint);
-    assert.match(hint, /\[决策·p · active · 2026-11-09\] 新结论丁/u);
+    assert.match(hint, /\[决策·p · 11-09\] 新结论丁/u);
     assert.ok(!hint.includes(fresh[3].id), '第 4 条不该出现');
   } finally { f.sessions.dispose(); }
 });

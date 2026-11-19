@@ -74,17 +74,20 @@ test('每步提示：先取 12 条再按常驻索引去重、只展示 3 条，�
     assert.equal(hint.split('\n').filter(line => line.startsWith('- ')).length, 3, '只展示 3 条：' + hint);
     assert.ok(!hint.includes('out-fifth'), '第 4 条检索结果不该出现');
     assert.ok(!hint.includes('sec-'), '已在常驻索引里的条目不再重复展示：' + hint);
-    assert.match(hint, /\[决策·p · active · 2026-11-09\] 常驻索引外的强匹配决策/u, '召回行带类型/项目/状态/日期：' + hint);
+    assert.match(hint, /\[决策·p · 11-09\] 常驻索引外的强匹配决策/u, '召回行带类型/项目/日期（active 不再写）：' + hint);
   } finally { sessions.dispose(); }
 });
 
 test('召回行：带 id、类型、项目、状态、日期，一行不超过 100 字', () => {
   const line = recallLine({ id: '20261111120711-9qvy5nr', type: 'fact', project: 'dsh-siyuan-notes', status: 'active', created: '20261111120711', statement: '很长的结论'.repeat(40) });
   assert.ok(line.length <= 100, line.length + ' 字：' + line);
-  assert.match(line, /^- 20261111120711-9qvy5nr \[事实·dsh-siyuan-notes · active · 2026-11-11\] /u);
+  assert.match(line, /^- 20261111120711-9qvy5nr \[事实·dsh-siyuan-notes · 11-11\] /u, line);
+  assert.equal(line.includes('active'), false, 'active 是默认值，不占字数：' + line);
   assert.ok(line.endsWith('…'), '超长结论要被截断');
   assert.equal(recallLine({ id: 'x', type: 'decision', project: 'p', status: 'active', created: '20261110', statement: '短结论' }),
-    '- x [决策·p · active · 2026-11-10] 短结论');
+    '- x [决策·p · 11-10] 短结论');
+  assert.equal(recallLine({ id: 'y', type: 'state', project: 'p', status: 'candidate', created: '20241110', statement: '候选结论' }),
+    '- y [状态·p · candidate · 24-11-10] 候选结论', '非默认状态与跨年日期都写出来');
 });
 
 test('常驻注入：stated 省掉可信度标签、verified 保留，总长仍不超预算', async () => {
@@ -122,15 +125,15 @@ test('常驻注入：预算用满时尽量多收录，被截断的行至少留 5
   } finally { backend.close(); }
 });
 
-test('checkup：同项目多条 active 状态主题不同时报 topicDrift，且不自动合并', async () => {
+test('checkup：同项目多条 active 状态主题不同时记入 multiStateProjects（中性统计，不合并）', async () => {
   const backend = memorySqlKernel();
   try {
     const store = backend.makeStore();
     await store.write({ ...trusted, type: 'state', topic: 'memory-plugin', body: stateBody('记忆插件改造进行中') });
     await store.write({ ...trusted, type: 'state', topic: 'image-engine', body: stateBody('图片引擎重写进行中') });
     const report = (await store.checkup({ scope })).value;
-    assert.equal(report.topicDrift.length, 1, JSON.stringify(report.topicDrift));
-    const group = report.topicDrift[0];
+    assert.equal(report.multiStateProjects.length, 1, JSON.stringify(report.multiStateProjects));
+    const group = report.multiStateProjects[0];
     assert.equal(group.project, 'p');
     assert.equal(group.topics.length, 2);
     for (const item of group.topics) {
@@ -140,16 +143,18 @@ test('checkup：同项目多条 active 状态主题不同时报 topicDrift，且
     }
     assert.deepEqual(group.topics.map(item => item.topic).sort(), ['image-engine', 'memory-plugin']);
     const active = (await store.list({ scope })).value.entries.filter(entry => entry.type === 'state' && entry.status === 'active');
-    assert.equal(active.length, 2, '只报告不合并：两条都还是 active');
+    assert.equal(active.length, 2, '只统计不合并：两条都还是 active');
+    assert.deepEqual(report.incomplete, [], '样本完整时不该有未检查项');
+    assert.equal('topicDrift' in report, false, 'v8 起不再返回 topicDrift 字段');
   } finally { backend.close(); }
 });
 
-test('checkup：同项目只有一个 active 主题时不报 topicDrift', async () => {
+test('checkup：同项目只有一个 active 主题时 multiStateProjects 为空', async () => {
   const backend = memorySqlKernel();
   try {
     const store = backend.makeStore();
     await store.write({ ...trusted, type: 'state', topic: 'memory-plugin', body: stateBody('只有一个主题') });
     const report = (await store.checkup({ scope })).value;
-    assert.deepEqual(report.topicDrift, []);
+    assert.deepEqual(report.multiStateProjects, []);
   } finally { backend.close(); }
 });

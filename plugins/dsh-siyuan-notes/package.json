@@ -1,6 +1,6 @@
 {
   "name": "dsh-siyuan-notes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "在 DSH Web 左侧栏浏览、搜索并块级编辑自建 SiYuan Note（思源笔记）文档，保存前自动备份到 ~/.dsh/siyuan-backups。",
   "type": "module",
   "keywords": [

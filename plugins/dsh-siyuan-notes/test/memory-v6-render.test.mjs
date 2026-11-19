@@ -36,9 +36,9 @@ test("searchRender：id 在行首，状态与主题都渲染出来", () => {
   const lines = out[0].text.split("\n");
   assert.equal(lines[0], "命中 2 条记忆：");
   // 逐字断言：id、类型、项目/主题、状态、结论的次序固定，改格式就会红。
-  assert.equal(lines[1], "- 20261111120000-aaaaaaa [state · dsh-siyuan-notes/发布 · active] 发布前必须跑一遍面板测试");
+  assert.equal(lines[1], "- 20261111120000-aaaaaaa [state · dsh-siyuan-notes/发布] 发布前必须跑一遍面板测试");
   // 没有主题的条目不能拼出多余的 "/"。
-  assert.equal(lines[2], "- 20261111120001-bbbbbbb [fact · * · active] 内核 SQL 没有参数绑定");
+  assert.equal(lines[2], "- 20261111120001-bbbbbbb [fact · *] 内核 SQL 没有参数绑定");
 });
 
 test("searchRender：结论截到 80 字加省略号，一条记忆只占一行", () => {
@@ -59,7 +59,7 @@ test("searchRender：刚写入的标记保留在行尾", () => {
     { query: "刚写入" },
     { ok: true, results: [{ id: "20261111120003-ddddddd", statement: "刚记下的一条", type: "preference", project: "*", status: "active", fresh: true }] },
   );
-  assert.ok(out[0].text.includes("- 20261111120003-ddddddd [preference · * · active] 刚记下的一条（刚写入）"), out[0].text);
+  assert.ok(out[0].text.includes("- 20261111120003-ddddddd [preference · *] 刚记下的一条（刚写入）"), out[0].text);
 });
 
 test("searchRender：没有 id 的条目退回 v5 格式（含可信度），不至于渲染成半截", () => {
@@ -81,7 +81,23 @@ test("searchRender：浏览模式提示与「结果不完整」提示都还在",
   const browse = searchRender({ type: "fact" }, { ok: true, results: [{ id: "20261111120004-eeeeeee", statement: "a", type: "fact", project: "p", status: "active" }] });
   assert.ok(browse[0].text.includes("浏览"), browse[0].text);
   const partial = searchRender({ query: "压缩" }, { ok: true, complete: false, warning: "仅缓存可用", results: [{ id: "20261111120005-fffffff", statement: "b", type: "fact", project: "p", status: "active" }] });
-  assert.ok(partial[0].text.includes("结果不完整：仅缓存可用"), partial[0].text);
+  assert.ok(partial[0].text.includes("结果被截断"), partial[0].text);
+  assert.ok(partial[0].text.includes("仅缓存可用"), partial[0].text);
+});
+
+test("searchRender：同年写 MM-DD、跨年写 YY-MM-DD，非默认可信度写成中文", () => {
+  const year = String(new Date().getFullYear());
+  const mark = (value) => (String(value).slice(0, 4) === year ? String(value).slice(4, 6) + "-" + String(value).slice(6, 8) : String(value).slice(2, 4) + "-" + String(value).slice(4, 6) + "-" + String(value).slice(6, 8));
+  const out = searchRender(
+    { query: "x" },
+    { ok: true, results: [
+      { id: "a", statement: "本年的一条", type: "fact", project: "p", status: "active", confidence: "verified", created: year + "1112110000" },
+      { id: "b", statement: "跨年的一条", type: "decision", project: "p", status: "candidate", confidence: "inferred", created: "20241110120000" },
+    ] },
+  );
+  const lines = out[0].text.split("\n");
+  assert.equal(lines[1], "- a [fact · p · " + mark(year + "1112110000") + " · 已核实] 本年的一条");
+  assert.equal(lines[2], "- b [decision · p · candidate · 24-11-10 · 推断] 跨年的一条");
 });
 
 test("search → read 链路：渲染出来的 id 能直接喂给 memory_read", async () => {

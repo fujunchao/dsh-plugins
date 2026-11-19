@@ -198,6 +198,7 @@ window.__ModuleLoader__.load({
 			memoryCopyId: "复制 id",
 			memoryCopied: "id 已复制",
 			memoryCount: "{n} 条",
+		memoryCountWindowed: "{n} 条 · 仅显示 {shown}",
 			memoryTypePref: "偏好",
 			memoryTypeFact: "事实",
 			memoryTypeDecision: "决策",
@@ -396,6 +397,7 @@ window.__ModuleLoader__.load({
 			memoryCopyId: "Copy id",
 			memoryCopied: "id copied",
 			memoryCount: "{n}",
+		memoryCountWindowed: "{n} · showing {shown}",
 			memoryTypePref: "Preference",
 			memoryTypeFact: "Fact",
 			memoryTypeDecision: "Decision",
@@ -636,6 +638,12 @@ window.__ModuleLoader__.load({
 .sy-mem-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .sy-mem-note{padding:12px;font-size:12px;color:var(--dsw-alias-label-secondary)}
 .sy-mem-note[data-tone=err]{color:var(--dsw-alias-state-error-primary)}
+.sy-mem-note[data-tone=warn]{color:var(--dsw-alias-state-warn-primary)}
+.sy-mem-note[data-tone=ok]{color:var(--dsw-alias-state-success-primary)}
+.sy-mem-banner{margin:6px 0;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.6;border:.5px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-base)}
+.sy-mem-banner[data-tone=warn]{color:var(--dsw-alias-state-warn-primary);border-color:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 35%,var(--dsw-alias-border-l1));background:color-mix(in srgb,var(--dsw-alias-state-warn-primary) 8%,transparent)}
+.sy-mem-stat{margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--dsw-alias-bg-base);font-size:12px}
+.sy-mem-stat p{margin:4px 0 0;color:var(--dsw-alias-label-secondary)}
 .sy-mem-review-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin:12px 0;white-space:normal}
 .sy-mem-review-fields label{display:flex;flex-direction:column;gap:6px}
 .sy-mem-review-fields label:first-child{flex-direction:row;align-items:center}
@@ -6221,11 +6229,26 @@ window.__ModuleLoader__.load({
 			return value !== "" && value !== "unassigned";
 		}
 
+		/** 列表分页：一页 200 条，和宿主的 maxListLimit 同一个数（契约 v10 §1.2）。 */
+		const MEMORY_PAGE_SIZE = 200;
+		/** 工作区/项目输入停手多久后才发请求（契约 v10 §4.1）。 */
+		const MEMORY_INPUT_DEBOUNCE_MS = 300;
+
 		/** 时间戳 `yyyyMMddHHmmss` → `MM-DD HH:mm`，读不出来就原样返回。 */
 		function memoryStamp(value) {
 			const text = typeof value === "string" ? value : "";
 			if (!/^\d{14}$/.test(text)) return text;
 			return `${text.slice(4, 6)}-${text.slice(6, 8)} ${text.slice(8, 10)}:${text.slice(10, 12)}`;
+		}
+
+		/** 时间戳距今天数：面板用它说「距上次确认 N 天」，读不出来返回 null。 */
+		function memoryAgeDays(value) {
+			const text = typeof value === "string" ? value : "";
+			const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$/.exec(text);
+			if (match === null) return null;
+			const at = new Date(+match[1], +match[2] - 1, +match[3], +match[4], +match[5], +match[6]).getTime();
+			if (!Number.isFinite(at)) return null;
+			return Math.max(0, Math.floor((Date.now() - at) / 86400000));
 		}
 
 		function MemoryIcon({ size, active }) {
@@ -6264,46 +6287,119 @@ window.__ModuleLoader__.load({
 			// 交接卡：**最后**一个 state slot——测试按位置预置状态，插在中间会错位。
 			const [handoff, setHandoff] = useState(null);
 			const [manager, setManager] = useState({ approval: null, selected: [], body: "", recoveries: null, inspection: null, confirmedMissing: false });
-			// 主题漂移的二次确认（同样追加在最后：测试按位置预置 state，插在中间会错位）。
-			const [drift, setDrift] = useState(null);
 
-			const load = useCallback(async () => {
+			// v10 的三个 slot 一律追加在最后：前面的 slot 按位置被旧测试预置，插在中间会错位。
+			// listing：列表回包里的真值（候选、全库状态计数、分页游标、上次读取是否失败）。
+			const [listing, setListing] = useState({ candidates: [], byStatus: null, offset: 0, hasMore: undefined, stale: false });
+			// query：关键词只在已加载条目里做客户端过滤，不发请求（契约 v10 §4.3）。
+			const [query, setQuery] = useState("");
+			// scopes：工作区/项目输入的候选值（GET ?view=scopes），拿不到就静默。
+			const [scopes, setScopes] = useState({ workspaces: [], projects: [] });
+
+			// 请求序号、输入定时器与「当前生效的筛选值」都放 ref：load 的身份才是稳定的
+			// （首挂载效应只跑一次），异步回调读到的也不会是上一帧的 state。
+			const requestSeq = useRef(0);
+			const projectTimer = useRef(null);
+			const workspaceTimer = useRef(null);
+			const filters = useRef({ type: "", status: "", project: "", workspace: "" });
+			filters.current = { type, status, project: project.trim(), workspace: (manager.workspace || "").trim() };
+			// t 的引用每帧都可能变，放进 ref 才不会让 load 换身份、把首挂载效应变成请求循环。
+			const translate = useRef(t);
+			translate.current = t;
+
+			const load = useCallback(async (request) => {
+				const next = request || {};
+				const current = filters.current;
+				const activeType = next.type !== undefined ? next.type : current.type;
+				const activeStatus = next.status !== undefined ? next.status : current.status;
+				const activeProject = String(next.project !== undefined ? next.project : current.project).trim();
+				const activeWorkspace = String(next.workspace !== undefined ? next.workspace : current.workspace).trim();
+				const offset = Number(next.offset) > 0 ? Number(next.offset) : 0;
+				const append = next.append === true && offset > 0;
+				const seq = (requestSeq.current += 1);
 				setLoading(true);
 				setError(null);
 				try {
-					const params = new URLSearchParams({ view: "entries", limit: "200" });
-					const recording = await callHost("/memory?view=recording");
-					setManager(previous => ({ ...previous, recording }));
-					if (type) params.set("type", type);
-					if (status) params.set("status", status);
-					if (project.trim()) params.set("project", project.trim());
-					if (manager.workspace?.trim()) params.set("workspace", manager.workspace.trim());
+					const params = new URLSearchParams({ view: "entries", limit: String(MEMORY_PAGE_SIZE) });
+					if (offset > 0) params.set("offset", String(offset));
+					if (activeType) params.set("type", activeType);
+					if (activeStatus) params.set("status", activeStatus);
+					if (activeProject) params.set("project", activeProject);
+					if (activeWorkspace) params.set("workspace", activeWorkspace);
 					// 概览与列表一起取：v5 这里还带了一个 /memory?refresh=1（宿主没有这个分支，
 					// 属于死参数），v6 去掉；列表请求本身就是重新读取。
-					const [head, listed] = await Promise.all([
+					const [recording, head, listed] = await Promise.all([
+						callHost("/memory?view=recording"),
 						callHost("/memory"),
 						callHost("/memory?" + params.toString()),
 					]);
+					// 过期响应：后发的请求已经接管，这一份既不能覆盖列表，也不能替别人清掉 loading。
+					if (seq !== requestSeq.current) return;
+					const page = Array.isArray(listed.entries) ? listed.entries : [];
+					setManager(previous => ({ ...previous, recording }));
 					setOverview(head);
-					setEntries(Array.isArray(listed.entries) ? listed.entries : []);
-					if (listed.complete === false) setNotice({ tone: "warn", text: t("memoryPartial") });
+					setEntries(previous => {
+						if (!append) return page;
+						// 「加载更多」是接着往下读：按 id 去重，翻页期间新写入的条目不会变成重复行。
+						const merged = [...previous];
+						for (const entry of page) if (!merged.some(item => item.id === entry.id)) merged.push(entry);
+						return merged;
+					});
+					setListing(previous => ({
+						// 候选只跟着第一页回来（宿主的实现：翻页再带一份只会让面板重复渲染），
+						// 所以续读时保留上一份，不能顺手清掉。
+						candidates: Array.isArray(listed.candidates) ? listed.candidates : offset > 0 ? previous.candidates : [],
+						byStatus: listed.byStatus && typeof listed.byStatus === "object" ? listed.byStatus : null,
+						offset: Number.isFinite(Number(listed.offset)) ? Number(listed.offset) : offset,
+						hasMore: listed.hasMore === true ? true : listed.hasMore === false ? false : undefined,
+						stale: false,
+					}));
+					if (listed.complete === false) setNotice({ tone: "warn", text: translate.current("memoryPartial") });
 				} catch (failure) {
+					if (seq !== requestSeq.current) return;
+					// 失败只加一行提示：一次网络抖动就把已经读到的列表清空，等于拿用户当调试工具（契约 v10 §4.1）。
 					setError(failure && failure.message ? failure.message : String(failure));
+					setListing(previous => ({ ...previous, stale: true }));
 				} finally {
-					setLoading(false);
+					if (seq === requestSeq.current) setLoading(false);
 				}
-			}, [type, status, project, manager.workspace]);
+			}, []);
 
+			// 首挂载读一次；之后只有输入（300ms 防抖后）、筛选 chip、刷新与「加载更多」显式触发，
+			// 不再让每一次击键都打一次请求（契约 v10 §4.1）。
 			useEffect(() => {
 				void load();
+				return () => {
+					clearTimeout(projectTimer.current);
+					clearTimeout(workspaceTimer.current);
+				};
 			}, [load]);
 
+			/** 输入停手 300ms 才发请求：连打 5 个键只该发一次（契约 v10 §4.1）。 */
+			const reloadLater = (timer, request) => {
+				if (timer.current !== null) clearTimeout(timer.current);
+				timer.current = setTimeout(() => {
+					timer.current = null;
+					void load(request);
+				}, MEMORY_INPUT_DEBOUNCE_MS);
+			};
+
+			/** 同主题候选被一并作废时要如实说几条，别让用户以为只确认了这一条（契约 v10 §1.3）。 */
+			const approveText = result => {
+				const superseded = Array.isArray(result?.supersededCandidates) ? result.supersededCandidates.length : 0;
+				const skipped = Number(result?.skippedCandidates) || 0;
+				const truncated = result?.candidatesTruncated === true;
+				if (superseded === 0 && !truncated) return t("memoryApproved");
+				return "已作废 " + superseded + " 条同主题候选" + (skipped > 0 ? "，另有 " + skipped + " 条超出上限未处理" : "")
+					+ (truncated ? "；同主题候选超过单次扫描上限，可能还有未处理" : "") + "；本条已生效";
+			};
+
 			const act = useCallback(
-				async (action, id) => {
+				async (action, id, expectedRevision) => {
 					try {
 						const entry = entries.find(item => item.id === id);
-						await callHost("/memory", { action, id, expectedRevision: entry?.revision }, "POST");
-						setNotice({ tone: "ok", text: t(action === "approve" ? "memoryApproved" : action === "revoke" ? "memoryRevoked" : "memoryRestored") });
+						const result = await callHost("/memory", { action, id, expectedRevision: expectedRevision !== undefined ? expectedRevision : entry?.revision }, "POST");
+						setNotice({ tone: "ok", text: action === "approve" ? approveText(result) : t(action === "revoke" ? "memoryRevoked" : "memoryRestored") });
 						await load();
 					} catch (failure) {
 						const message = failure && failure.message ? failure.message : String(failure);
@@ -6343,9 +6439,15 @@ window.__ModuleLoader__.load({
 				const current = manager.approval;
 				if (!current || manager.comparisonDirty) return;
 				try {
-					await callHost("/memory", { action: "approve", id: current.candidate.id, expectedRevision: current.candidate.revision,
+					const approved = await callHost("/memory", { action: "approve", id: current.candidate.id, expectedRevision: current.candidate.revision,
 						...approvalChoice(), body: manager.body, supersedes: manager.selected, expectedRevisions: Object.fromEntries(current.conflicts.filter(item => manager.selected.includes(item.id)).map(item => [item.id, item.revision])) }, "POST");
-					setManager(previous => ({ ...previous, approval: null })); setNotice({ tone: "ok", text: t("memoryApproved") }); await load();
+					setManager(previous => ({ ...previous, approval: null }));
+					// v10：弹窗确认也要说清顺带作废了几条同主题候选（以前只有候选区块的一键确认会说）。
+					const swept = Array.isArray(approved?.supersededCandidates) ? approved.supersededCandidates.length : 0;
+					const truncated = approved?.candidatesTruncated === true;
+					setNotice({ tone: "ok", text: t("memoryApproved") + (swept ? "；已作废 " + swept + " 条同主题候选" : "")
+						+ (truncated ? "；同主题候选超过单次扫描上限，可能还有未处理" : "") });
+					await load();
 				} catch (failure) { setNotice({ tone: "err", text: failure.message }); }
 			};
 			const loadRecoveries = async () => {
@@ -6359,6 +6461,33 @@ window.__ModuleLoader__.load({
 					else { setNotice({ tone: "ok", text: "已完成核对与恢复" }); await loadRecoveries(); await load(); }
 				} catch (failure) { setNotice({ tone: "err", text: failure.message }); }
 			};
+
+			/** 改归属：把一条记忆挪到别的项目/工作区，走宿主的 reproject 动作（契约 v10 §5）。 */
+			const savePlacement = async entry => {
+				const editing = manager.placeId === entry.id;
+				const nextProject = String(editing ? manager.placeProject ?? "" : entry.project || "").trim();
+				const nextWorkspace = String(editing ? manager.placeWorkspace ?? "" : entry.workspace && entry.workspace !== "unassigned" ? entry.workspace : "").trim();
+				try {
+					const moved = await callHost("/memory", { action: "reproject", id: entry.id, project: nextProject, workspace: nextWorkspace, expectedRevision: entry.revision }, "POST");
+					setManager(previous => ({ ...previous, placeId: "", placeError: null }));
+					setNotice({ tone: "ok", text: "归属已改为 " + ((moved?.project || nextProject) || "*") + (moved?.workspace ? " @ " + moved.workspace : "") });
+					await load();
+				} catch (failure) {
+					// 失败就地写清原因：归属失败多半是「这个工作区里没有这个项目」。
+					setManager(previous => ({ ...previous, placeId: entry.id, placeProject: nextProject, placeWorkspace: nextWorkspace, placeError: failure && failure.message ? failure.message : String(failure) }));
+				}
+			};
+
+			// 输入候选值只取一次；没有 datalist 也照样能手输，所以失败不提示。
+			const loadScopes = useCallback(async () => {
+				try {
+					const result = await callHost("/memory?view=scopes");
+					setScopes({ workspaces: Array.isArray(result?.workspaces) ? result.workspaces : [], projects: Array.isArray(result?.projects) ? result.projects : [] });
+				} catch {
+					/* 拿不到候选值不影响手输 */
+				}
+			}, []);
+			useEffect(() => { void loadScopes(); }, [loadScopes]);
 
 			const loadHandoff = useCallback(async () => {
 				try {
@@ -6383,39 +6512,26 @@ window.__ModuleLoader__.load({
 				} catch (failure) { setNotice({ tone: "err", text: failure.message }); }
 			};
 
-			/**
-			 * 主题漂移收敛：只保留最新那条，把更旧的标成「已被取代」。
-			 *
-			 * 这里是**用户点两次才动手**的数据变更，所以先在面板上把将作废的 id 与主题列出来，
-			 * 确认足迹看得见再发请求；正文不会被删除，思源里仍能回看。
-			 */
-			const collapseDrift = async target => {
-				try {
-					const result = await callHost("/memory", { action: "collapse-topic-drift", project: target.project, workspace: target.workspace, keepId: target.keepId }, "POST");
-					const count = Array.isArray(result?.superseded) ? result.superseded.length : 0;
-					setNotice({ tone: "ok", text: count
-						? "已收敛 " + count + " 条旧状态" + (result?.skipped ? "（另有 " + result.skipped + " 条受取代链上限保护，本次未动）" : "")
-						: "这一组已经只有一条有效状态，无需收敛" });
-					setDrift(null);
-					await loadCheckup();
-				} catch (failure) {
-					const message = failure && failure.message ? failure.message : String(failure);
-					setNotice({ tone: "err", text: message });
-				}
-			};
-			// keepId 取组内 created 最大的主题；只有「比它更旧」的才可能被作废——与存储层同一条规则。
-			const driftGroups = (manager.checkup?.topicDrift || []).map(group => {
-				const topics = [...(group.topics || [])].sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")));
-				const keep = topics[0];
-				const stale = topics.slice(1).filter(item => item && keep && String(item.created || "") < String(keep.created || ""));
-				return { project: group.project, workspace: group.workspace, topics, keep, stale };
-			});
-
+			// v8：体检窗口不完整时，某些判断没有真正跑过（见 checkup().incomplete），不能显示成「0 没问题」。
+			const checkupIncomplete = new Set(manager.checkup?.incomplete || []);
+			// 说清缺的是哪一项：只说「另有未检查项」等于没说。
+const UNCHECKED_TEXT = { "brokenChains.missing-target": "（另有「取代目标是否还存在」未检查）" };
+const uncheckedLabel = key => [...checkupIncomplete].filter(item => String(item).startsWith(key + ".")).map(item => UNCHECKED_TEXT[item] ?? "（另有未检查项）").join("");
+			// 同项目多任务状态：v8 起只是中性统计——一个项目并行几件事是常态，不提供任何批量作废入口。
+			const multiGroups = manager.checkup?.multiStateProjects || [];
 			useEffect(() => {
 				if (notice === null) return undefined;
 				const timer = setTimeout(() => setNotice(null), 2600);
 				return () => clearTimeout(timer);
 			}, [notice]);
+
+			// v10：状态 chip 上写全库真值（契约 §1.2 的 byStatus），读不到就只写名字。
+			const statusValue = key => {
+				const raw = listing.byStatus && key in listing.byStatus ? Number(listing.byStatus[key]) : NaN;
+				return Number.isFinite(raw) ? raw : null;
+			};
+			const statusValues = ["active", "candidate", "superseded", "revoked"].map(statusValue);
+			const statusTotal = statusValues.some(value => value !== null) ? statusValues.reduce((sum, value) => sum + (value || 0), 0) : null;
 
 			const chips = [];
 			const typeOptions = ["", "preference", "fact", "decision", "state"];
@@ -6428,26 +6544,28 @@ window.__ModuleLoader__.load({
 							type: "button",
 							className: "sy-mem-chip",
 							"data-on": type === value ? true : undefined,
-							onClick: () => setType(value),
+							onClick: () => { setType(value); void load({ type: value }); },
 						},
 						value === "" ? t("memoryAll") : t(MEMORY_TYPE_LABEL[value]),
 					),
 				);
 			}
 			const statusOptions = ["", "candidate", "active", "superseded", "revoked"];
-			const statusChips = statusOptions.map((value) =>
-				h(
+			const statusChips = statusOptions.map((value) => {
+				const count = value === "" ? statusTotal : statusValue(value);
+				const label = value === "" ? t("memoryAll") : t(MEMORY_STATUS_LABEL[value]);
+				return h(
 					"button",
 					{
 						key: "status:" + value,
 						type: "button",
 						className: "sy-mem-chip",
 						"data-on": status === value ? true : undefined,
-						onClick: () => setStatus(value),
+						onClick: () => { setStatus(value); void load({ status: value }); },
 					},
-					value === "" ? t("memoryAll") : t(MEMORY_STATUS_LABEL[value]),
-				),
-			);
+					count === null ? label : label + " " + count,
+				);
+			});
 
 			// 最近 24 小时内生效的条目单独列在最上面：自动整理直接生效之后，「刚记了什么、记错了一键撤」比逐条事前确认更顺手。
 			const recentRows = entries.filter(entry => {
@@ -6455,9 +6573,72 @@ window.__ModuleLoader__.load({
 				const c = entry.created;
 				return Date.now() - new Date(+c.slice(0, 4), +c.slice(4, 6) - 1, +c.slice(6, 8), +c.slice(8, 10), +c.slice(10, 12), +c.slice(12, 14)).getTime() < 86400000;
 			});
-			const rows = entries.map((entry) => {
+			// v9：徽标用 catalog 真值（全库有效条数），而不是当前这一页最多 200 条。
+			const catalogTotal = (overview?.catalog || []).reduce((sum, item) => sum + (Number(item.count) || 0), 0);
+			// v10：关键词只在已加载的条目里过滤（结论/正文/项目/主题），不发请求（契约 §4.3）。
+			const needle = query.trim().toLowerCase();
+			const visible = needle === "" ? entries : entries.filter((entry) => [entry.statement, entry.body, entry.project, entry.topic].some((value) => typeof value === "string" && value.toLowerCase().includes(needle)));
+			// v10：候选不再被 200 条窗口藏掉（契约 §1.2）。按 topicId 分组——同主题候选确认时会被一并作废，
+			// 所以组头先写清有几条，组内只有最新那条给主按钮，其余明说「将被一并作废」。
+			// 宿主按 created 排的候选顺序不保证「最老在前」（list() 最后还会按 scope 重排一次），
+			// 面板自己按时间升序排一遍：积压最久的先露头，正是契约 §1.2 想要的处理顺序。
+			const candidateRows = (Array.isArray(listing.candidates) ? listing.candidates : [])
+				.slice().sort((left, right) => String(left.created || "").localeCompare(String(right.created || "")));
+			const candidateTotal = statusValue("candidate");
+			// 「同主题」的判据必须与宿主一致，否则主按钮就是一句空话：宿主的 siblingCandidates 只对
+			// type=state 且有 topic 的候选分组（键是 memoryTopicId = 工作区 + 项目 + 规范化主题，
+			// 条目上有 topicId 就直接用它）。别的类型确认时不会作废谁，所以各自单独成组。
+			const candidateGroupKey = (entry) => {
+				if (entry.type !== "state" || String(entry.topic || "").trim() === "") return "entry:" + entry.id;
+				if (entry.topicId) return "topic:" + entry.topicId;
+				const workspace = String(entry.workspace || "").replace(/\\/g, "/").replace(/\/+$/, "");
+				const scoped = /^[a-z]:\//i.test(workspace) ? workspace.toLowerCase() : workspace;
+				return "topic:" + JSON.stringify([scoped, entry.project || "", String(entry.topic).trim().toLowerCase().replace(/[ _\t-]+/g, "-")]);
+			};
+			const candidateGroups = (() => {
+				const groups = new Map();
+				for (const entry of candidateRows) {
+					const grouped = candidateGroupKey(entry);
+					const bucket = groups.get(grouped);
+					if (bucket) bucket.push(entry);
+					else groups.set(grouped, [entry]);
+				}
+				// 组内按 created 降序：最新那条才是主按钮该落在的那一条。
+				return [...groups.values()].map((items) => items.slice().sort((left, right) => String(right.created || "").localeCompare(String(left.created || ""))));
+			})();
+			const candidateBlock = candidateRows.length === 0 ? null : h(
+				"section",
+				{ className: "sy-mem-body", "aria-label": "候选记忆" },
+				h("strong", null, "候选（推断）" + (candidateTotal === null ? candidateRows.length : candidateTotal) + " 条" + (candidateTotal !== null && candidateTotal > candidateRows.length ? "（这里是最早的 " + candidateRows.length + " 条）" : "")),
+				candidateGroups.map((items) => h(
+					"div",
+					{ key: "candidate-group:" + (items[0].topicId || items[0].id) },
+					items.length > 1 ? h("div", { className: "sy-mem-meta" }, h("strong", null, "同主题 " + items.length + " 条候选")) : null,
+					items.map((entry, index) => h(
+						"div",
+						{ key: "candidate:" + entry.id, className: "sy-mem-meta" },
+						h("span", { style: { flex: "1 1 auto", minWidth: 0 } }, entry.statement),
+						h("span", null, (entry.project || "*") + (entry.topic ? " / " + entry.topic : "")),
+						h("span", null, memoryStamp(entry.created)),
+						index === 0
+							// 缺工作区/项目的老候选一键必然失败：沿用列表里那套「先选范围再确认」。
+							? h("button", {
+								type: "button",
+								className: "sy-mem-btn",
+								disabled: loading,
+								onClick: () => (hasUsableWorkspace(entry) ? void act("approve", entry.id, entry.revision) : void beginApproval(entry)),
+							}, hasUsableWorkspace(entry) ? (items.length > 1 ? "确认生效（作废其余 " + (items.length - 1) + " 条）" : "确认生效") : "选范围后确认")
+							: h("span", null, "将被一并作废"),
+					)),
+				)),
+			);
+			const rows = visible.map((entry) => {
 				const isOpen = openId === entry.id;
 				const bodyText = typeof entry.body === "string" && entry.body !== "" ? entry.body : entry.statement;
+				// v10：复核早已不是门槛，只把「距上次确认多久」当信息说清（契约 §6）；缺范围的老条目输入框留空。
+				const staleDays = entry.stale ? memoryAgeDays(entry.approvedAt || entry.created) : null;
+				const placeProject = manager.placeId === entry.id ? manager.placeProject ?? "" : entry.project || "";
+				const placeWorkspace = manager.placeId === entry.id ? manager.placeWorkspace ?? "" : entry.workspace && entry.workspace !== "unassigned" ? entry.workspace : "";
 				return h(
 					"div",
 					{ key: entry.id, "data-open": isOpen ? true : undefined },
@@ -6495,6 +6676,18 @@ window.__ModuleLoader__.load({
 								h("pre", { className: "sy-mem-body" }, bodyText),
 								h("div", { className: "sy-mem-note" }, "来源：" + (entry.source || "未记录") + (entry.evidence ? "；依据：" + entry.evidence : "")),
 								h("div", { className: "sy-mem-note" }, "适用范围：" + (entry.workspace === "*" ? "所有工作区" : entry.workspace || "待归属") + "；来源声明：" + (entry.confidence || "inferred") + "；记录于：" + memoryStamp(entry.created)),
+								entry.stale ? h("div", { className: "sy-mem-note" }, staleDays === null ? "距上次确认：时间未知" : "距上次确认 " + staleDays + " 天") : null,
+								// 改归属：写入落点要看得见、改得动（契约 v10 §5）。
+								h(
+									"div",
+									{ className: "sy-mem-filters" },
+									h("input", { className: "sy-mem-input", "aria-label": "改归属项目", placeholder: "项目", value: placeProject,
+										onChange: event => setManager(previous => ({ ...previous, placeId: entry.id, placeProject: event.target.value, placeError: null })) }),
+									h("input", { className: "sy-mem-input", "aria-label": "改归属工作区", placeholder: "工作区路径", value: placeWorkspace,
+										onChange: event => setManager(previous => ({ ...previous, placeId: entry.id, placeWorkspace: event.target.value, placeError: null })) }),
+									h("button", { type: "button", className: "sy-mem-btn", disabled: loading, onClick: () => void savePlacement(entry) }, "保存归属"),
+								),
+								manager.placeId === entry.id && manager.placeError ? h("div", { className: "sy-mem-note", "data-tone": "err" }, "改归属失败：" + manager.placeError) : null,
 								h(
 									"div",
 									{ className: "sy-mem-actions" },
@@ -6552,7 +6745,7 @@ window.__ModuleLoader__.load({
 					h("h2", null, t("memoryTitle")),
 					h("button", { type: "button", className: "sy-mem-btn", onClick: () => void loadCheckup() }, "体检"),
 					h("button", { type: "button", className: "sy-mem-btn", onClick: () => manager.recoveries === null ? void loadRecoveries() : setManager(previous => ({ ...previous, recoveries: null, inspection: null })) }, "写入恢复"),
-					overview ? h(Badge, null, t("memoryCount", { n: entries.length })) : null,
+					overview ? h(Badge, null, entries.length > 0 && catalogTotal > entries.length ? t("memoryCountWindowed", { n: catalogTotal, shown: entries.length }) : t("memoryCount", { n: catalogTotal || entries.length })) : null,
 					h(
 						"button",
 						{
@@ -6571,19 +6764,32 @@ window.__ModuleLoader__.load({
 						t("memoryRefresh"),
 					),
 				),
+				// v10：读失败时保留列表，只在顶部说清这一页可能不是最新的（契约 §4.1）。
+				listing.stale ? h("div", { className: "sy-mem-note", "data-tone": "warn" }, "显示的可能不是最新内容；下面是上一次成功读取的结果。") : null,
 				h("div", { className: "sy-mem-filters" }, chips),
 				h("div", { className: "sy-mem-filters" }, statusChips),
 				h(
 					"div",
 					{ className: "sy-mem-filters" },
+					// v10：工作区/项目停手 300ms 才请求，并挂 datalist 给候选值（契约 §4.1 / §4.2）。
 					h("input", {
 						className: "sy-mem-input",
+						list: "sy-mem-projects",
 						placeholder: t("memoryProject"),
 						value: project,
-						onChange: (event) => setProject(event.target.value),
+						onChange: (event) => {
+							const value = event.target.value;
+							setProject(value);
+							reloadLater(projectTimer, { project: value });
+						},
 					}),
-					h("input", { className: "sy-mem-input", "aria-label": "工作区范围", placeholder: "工作区路径（留空为全部工作区）", value: manager.workspace || "", onChange: event => setManager(previous => ({ ...previous, workspace: event.target.value })) }),
+					h("input", { className: "sy-mem-input", list: "sy-mem-workspaces", "aria-label": "工作区范围", placeholder: "工作区路径（留空为全部工作区）", value: manager.workspace || "", onChange: event => { const value = event.target.value; setManager(previous => ({ ...previous, workspace: value })); reloadLater(workspaceTimer, { workspace: value }); } }),
+					// 搜索纯客户端：改的是本地过滤词，一个请求都不发（契约 §4.3）。
+					h("input", { className: "sy-mem-input", "aria-label": "搜索记忆", placeholder: "搜索已加载的条目（结论 / 正文 / 项目 / 主题）", value: query, onChange: event => setQuery(event.target.value) }),
 				),
+				// datalist 没有可见外观；scopes 拿不到时它就是空的，输入照常可用。
+				h("datalist", { id: "sy-mem-projects" }, (scopes.projects || []).map(value => h("option", { key: value, value }))),
+				h("datalist", { id: "sy-mem-workspaces" }, (scopes.workspaces || []).map(value => h("option", { key: value, value }))),
 				h("div", { className: "sy-mem-note" }, "范围：" + (manager.workspace || "全部工作区") + "；" + (project || "全部项目") + "。交接卡与体检沿用此范围。"),
 				h("div", { className: "sy-mem-note" }, "记忆写入即生效；自动整理出来的条目带「自动整理」标记。记错了在这里一键撤销，改正文请到思源。"),
 					// 会话级「不记录」必须看得见、撤得回：否则一句被误解的话会让整场会话悄悄不再记录。
@@ -6597,26 +6803,21 @@ window.__ModuleLoader__.load({
 							h("span", { style: { flex: "1 1 auto", minWidth: 0 } }, entry.statement),
 							h("button", { type: "button", className: "sy-mem-btn", onClick: () => void act("revoke", entry.id) }, "撤销")))) : null,
 				manager.checkup ? h("section", { className: "sy-mem-body", "aria-label": "记忆体检" },
-					h("h3", null, "记忆体检"), h("p", null, "已检查 " + manager.checkup.total + " 条，其中 " + manager.checkup.active + " 条有效。" + (manager.checkup.complete === false ? "仅检查最近 " + manager.checkup.scannedLimit + " 条，结果不完整。" : "")),
+					h("h3", null, "记忆体检"),
+					// v8：扫描窗口不完整必须常驻可见。v7 只把它写成标题段落里的括号从句，
+					// 而「取代关系异常：0」在不完整时是「没查」而不是「没问题」。
+					manager.checkup.complete === false
+						? h("div", { className: "sy-mem-banner", "data-tone": "warn" },
+							"只检查了最近 " + manager.checkup.scannedLimit + " 条" + (manager.checkup.libraryTotal > manager.checkup.scannedLimit ? "（全库共 " + manager.checkup.libraryTotal + " 条）" : "") + "，下面的数字只代表这个窗口，不代表全库。")
+						: null,
+					h("p", null, "已检查 " + manager.checkup.total + " 条，其中 " + manager.checkup.active + " 条有效。"),
 					[["重复条目", "duplicates"], ["疑似相似", "similar"], ["过期状态", "staleStates"], ["取代关系异常", "brokenChains"], ["可归档", "archiveCandidates"]].map(([label, key]) => h("div", { key },
-						h("strong", null, label + "：" + (manager.checkup[key]?.length || 0)), (manager.checkup[key] || []).map((item, index) => h("p", { key: index }, (item.statement || item.leftText || item.id || "") + (item.reason ? "；" + item.reason : "")))))) : null,
-				manager.checkup && driftGroups.length ? h("section", { className: "sy-mem-body", "aria-label": "主题漂移" },
-					h("h3", null, "主题漂移（" + driftGroups.length + " 组）"),
-					h("p", null, "同一个项目里有多条有效状态、主题却不止一个：常驻注入与召回会同时看到它们。收敛只作废「比保留项更旧」的状态，更新的不动，正文也不会删除。"),
-					driftGroups.map(group => h("div", { key: "drift:" + group.project + ":" + group.workspace, className: "sy-mem-note", "data-tone": "warn" },
-						h("strong", null, (group.project || "*") + "（" + group.topics.length + " 个主题）"),
-						h("div", null, "保留最新：" + (group.keep?.topic || "未命名") + "（" + memoryStamp(group.keep?.created) + "）"),
-						group.stale.length
-							? h("div", null,
-								group.stale.map(item => h("p", { key: "stale:" + item.id }, "将作废：" + (item.topic || "未命名") + " · " + String(item.statement || "").slice(0, 40))),
-								drift && drift.confirming && drift.project === group.project && drift.workspace === group.workspace
-									? h("div", null,
-										h("p", null, "确认后会把 " + drift.stale.length + " 条旧状态标为「已被取代」：" + drift.stale.map(item => item.topic || item.id).join("、") + "。正文保留在思源里，可随时回看或恢复。"),
-										h("button", { type: "button", className: "sy-mem-btn", onClick: () => void collapseDrift(drift) }, "确认收敛（" + drift.stale.length + " 条）"),
-										h("button", { type: "button", className: "sy-mem-btn", onClick: () => setDrift(null) }, "取消"))
-									: h("button", { type: "button", className: "sy-mem-btn", onClick: () => setDrift({ confirming: true, project: group.project, workspace: group.workspace, keepId: group.keep.id, stale: group.stale }) }, "只保留最新"))
-							: h("div", null, "只有一条更新的主题，无需收敛。")
-					))) : null,
+						h("strong", null, label + "：" + (manager.checkup[key]?.length || 0) + uncheckedLabel(key)), (manager.checkup[key] || []).map((item, index) => h("p", { key: index }, (item.statement || item.leftText || item.id || "") + (item.reason ? "；" + item.reason : ""))))),
+					// 同项目多任务状态：中性统计，没有按钮（v8 删掉了「只保留最新」）。
+					multiGroups.length ? h("div", { className: "sy-mem-stat" },
+						h("strong", null, "同项目多任务状态：" + multiGroups.length + " 组（最多 " + Math.max(...multiGroups.map(group => group.topics?.length || 0)) + " 个主题/组）"),
+						h("p", null, "一个项目并行多件事是正常的：这些状态都会参与召回，无需清理。")) : null,
+					) : null,
 				notice ? h("div", { className: "sy-mem-note", "data-tone": notice.tone }, notice.text) : null,
 				manager.approval ? h("section", { className: "sy-mem-body", "aria-label": "比较并确认记忆" },
 					h("h3", null, manager.approval.candidate.type === "state" ? "比较并确认状态" : "核对记忆与适用范围"),
@@ -6683,11 +6884,29 @@ window.__ModuleLoader__.load({
 				error !== null
 					? h("div", { className: "sy-mem-note", "data-tone": "err" }, t("memoryFailed", { message: error }))
 					: null,
-				loading
+				candidateBlock,
+				// v10：候选不再被 200 条窗口藏掉，读失败也不再清空列表——所以「还没有记忆」只在
+				// 真的空、没有候选、且上次读取成功时才说（契约 §1.3 / §4.1）。
+				loading && entries.length === 0
 					? h("div", { className: "sy-mem-note" }, t("memoryLoading"))
-					: rows.length === 0
-						? h("div", { className: "sy-mem-note" }, t("memoryEmpty"))
-						: h("div", { className: "sy-mem-list" }, rows),
+					: rows.length > 0
+						? h("div", { className: "sy-mem-list" }, rows)
+						: needle !== ""
+							? h("div", { className: "sy-mem-note" }, "没有匹配的条目。")
+							: candidateRows.length > 0 || listing.stale
+								? null
+								: h("div", { className: "sy-mem-note" }, t("memoryEmpty")),
+				// v10 分页：底部常显「已显示 M / N 条」，还有下一页时给「加载更多」（契约 §4.3）。
+				h(
+					"div",
+					{ className: "sy-mem-filters" },
+					h("span", { className: "sy-mem-note" }, statusTotal === null ? "已显示 " + visible.length + " 条" : "已显示 " + visible.length + " / " + statusTotal + " 条"),
+					listing.hasMore === true
+						? h("button", { type: "button", className: "sy-mem-btn", disabled: loading, onClick: () => void load({ offset: (Number(listing.offset) || 0) + MEMORY_PAGE_SIZE, append: true }) }, "加载更多")
+						: listing.hasMore === false
+							? h("span", { className: "sy-mem-note" }, "已全部加载")
+							: null,
+				),
 			);
 		}
 

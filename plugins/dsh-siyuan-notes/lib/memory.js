@@ -66,6 +66,38 @@ export const MEMORY_ATTRS = Object.freeze({
 });
 
 /** 硬上限。全部在这里收口，调用方不能绕过。 */
+/** 首行「当前项目：」最多列几个项目（超出折成「等 N 个」）。 */
+const PROJECT_LINE_MAX = 6;
+/** 标签类文本的截断：超过 max 就补省略号——硬切会把 dsh-siyuan-notes 切成「d」，看着像另一个项目。 */
+const clipLabel = (text, max) => {
+  const value = String(text ?? '');
+  return value.length > max ? value.slice(0, max) + '…' : value;
+};
+/**
+ * 首行项目清单：只数项目个数，**绝不截断单个项目名**。
+ * v7 用的是 join(' / ').slice(0, 100)，真实工作区里正好把 dsh-siyuan-notes 切成「d」。
+ */
+const projectSummaryLine = names => {
+  const list = (Array.isArray(names) ? names : []).filter(name => typeof name === 'string' && name !== '');
+  if (!list.length) return '仅全局';
+  const head = list.slice(0, PROJECT_LINE_MAX).join(' / ');
+  return list.length > PROJECT_LINE_MAX ? head + ' 等 ' + (list.length - PROJECT_LINE_MAX) + ' 个' : head;
+};
+
+/** 「下一步」行的前缀：四个空格，对齐在 `  - ` 的内容下方。 */
+const NEXT_STEP_PREFIX = '    下一步：';
+/**
+ * 从 state 正文抽「- 下一步：…」的值。
+ * 值为「无」「-」「—」或空时返回空串：这类占位不配单独占一行（真实库 14 条里有一半是「无」）。
+ */
+const nextStepText = body => {
+  const match = /^[ \t]*[-*•]?[ \t]*下一步[ \t]*[:：][ \t]*(\S.*)$/mu.exec(String(body ?? ''));
+  if (!match) return '';
+  const value = match[1].trim().replace(/[。；;]+$/u, '');
+  if (value === '' || value === '无' || value === '-' || value === '—') return '';
+  return clipLabel(value, 40);
+};
+
 export const MEMORY_LIMITS = Object.freeze({
   /** 一次检索最多返回多少条。 */
   maxSearchLimit: 25,
@@ -130,13 +162,43 @@ export function sqlString(value) {
  * @param {"and" | "or"} [operator]
  * @returns {string | null} 可放进 `MATCH '<expr>'` 的表达式；没有可用词元时返回 null。
  */
+/** 超过这个长度、且不含空格的单段中文，按二元组展开：整句当短语在 FTS 里必然 0 命中。 */
+const LONG_QUERY_CHARS = 6;
+
+/**
+ * 检索词元。
+ *
+ * 空白切分是主路径（模型/用户给关键词）；但真实用法里经常是一整句中文，
+ * 而 FTS5 会把没空格的一串汉字当成一个短语——只有逐字连续出现才命中，实际必然 0 行。
+ * 所以「唯一的词元 + 无空格 + 超过 6 字 + 含中文」时改用二元组（与被动召回同一套切法：
+ * 先挖虚词再切、去掉通用二元组）。纯英文长串不展开：标识符本身就是精确词。
+ *
+ * @param {unknown} query
+ * @returns {string[]} 小写词元；没有可用词元时返回空数组（调用方走 LIKE 兜底）。
+ */
+/** 这段 query 会不会被展开成二元组（整句中文）：决定要不要按相关度排。 */
+export function queryExpanded(query) {
+  const text = String(typeof query === "string" ? query : "").trim().slice(0, MEMORY_LIMITS.maxQueryChars);
+  if (text === "") return false;
+  const parts = text.split(/\s+/u).map((token) => token.trim()).filter(Boolean);
+  if (parts.length !== 1 || [...text].length <= LONG_QUERY_CHARS || !/[\u4e00-\u9fff]/u.test(text)) return false;
+  return recallTerms(text).map((term) => term.text).length >= 2;
+}
+
+export function queryTokens(query) {
+  const text = String(typeof query === "string" ? query : "").trim().slice(0, MEMORY_LIMITS.maxQueryChars).toLowerCase();
+  if (text === "") return [];
+  const parts = text.split(/\s+/u).map((token) => token.trim()).filter(Boolean);
+  const usable = parts.filter((token) => [...token].length >= MEMORY_LIMITS.minTokenChars);
+  if (queryExpanded(query)) {
+    const grams = recallTerms(text).map((term) => term.text);
+    if (grams.length >= 2) return grams;
+  }
+  return usable;
+}
+
 export function ftsExpression(query, operator = "and") {
-  const text = typeof query === "string" ? query.trim().slice(0, MEMORY_LIMITS.maxQueryChars) : "";
-  if (text === "") return null;
-  const tokens = text
-    .split(/\s+/u)
-    .map((token) => token.trim())
-    .filter((token) => [...token].length >= MEMORY_LIMITS.minTokenChars);
+  const tokens = queryTokens(query);
   if (tokens.length === 0) return null;
   const quoted = tokens.map((token) => `"${token.replaceAll('"', '""')}"`);
   return quoted.join(operator === "or" ? " OR " : " ");
@@ -291,8 +353,9 @@ export function buildFtsSearchStatement(input) {
     input.status ? `  AND s.value = ${sqlString(input.status)}` : "  AND s.value IN ('active', 'candidate')",
     ...filters,
     ...memoryFilters(input),
-    memoryOrder(input),
-    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit, input.limit))};`,
+    // v9：有 query 时按 FTS5 的 rank（相关度）排、同分取新；无 query 的浏览与 LIKE 兜底仍按范围+时间。
+    input.ranked ? "ORDER BY rank, b.created DESC" : memoryOrder(input),
+    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit + 1, input.limit))};`,
   ].join("\n");
 }
 
@@ -320,7 +383,7 @@ export function buildLikeSearchStatement(input) {
     ...filters,
     ...memoryFilters(input),
     memoryOrder(input),
-    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit, input.limit))};`,
+    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit + 1, input.limit))};`,
   ].join("\n");
 }
 
@@ -351,7 +414,7 @@ export function buildFilterStatement(input) {
     ...filters,
     ...memoryFilters(input),
     memoryOrder(input),
-    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit, input.limit))};`,
+    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxSearchLimit + 1, input.limit))};`,
   ].join("\n");
 }
 
@@ -390,8 +453,9 @@ export function buildListStatement(input) {
     `WHERE b.box = ${sqlString(input.box)}`,
     ...filters,
     ...memoryFilters(input),
-    memoryOrder(input),
-    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxListLimit, input.limit))};`,
+    // v10：面板分页（offset）与「最老的候选优先」（order=oldest）。
+    input.order === 'oldest' ? 'ORDER BY b.created ASC, b.id ASC' : memoryOrder(input),
+    `LIMIT ${Math.max(1, Math.min(MEMORY_LIMITS.maxListLimit + 1, input.limit))}` + (Number.isFinite(input.offset) && input.offset > 0 ? ` OFFSET ${Math.trunc(input.offset)}` : '') + ';',
   ].join("\n");
 }
 
@@ -584,13 +648,24 @@ const RECALL_TYPE_LABELS = Object.freeze({ preference: '偏好', fact: '事实',
  * @param {number} [maxChars]
  * @returns {string}
  */
+/** 召回行的日期：同年写 MM-DD，跨年写 YY-MM-DD（14 位思源时间戳）。 */
+const recallStamp = created => {
+  const value = String(created ?? '');
+  if (!/^\d{8}/u.test(value)) return '';
+  const year = value.slice(0, 4);
+  const monthDay = value.slice(4, 6) + '-' + value.slice(6, 8);
+  return year === String(new Date().getFullYear()) ? monthDay : year.slice(2) + '-' + monthDay;
+};
+
 export function recallLine(entry, maxChars = 100) {
   const label = RECALL_TYPE_LABELS[entry?.type] ?? String(entry?.type ?? '');
-  const project = String(entry?.project ?? '').slice(0, 24);
+  const project = clipLabel(entry?.project ?? '', 24);
   const parts = [label + '·' + project];
-  parts.push(String(entry?.status ?? 'active') || 'active');
-  const created = String(entry?.created ?? '');
-  if (/^\d{8}/u.test(created)) parts.push(created.slice(0, 4) + '-' + created.slice(4, 6) + '-' + created.slice(6, 8));
+  // v9：active 是默认值，写出来只占字数；只有候选/已取代这类非默认状态才值得说。
+  const status = String(entry?.status ?? 'active');
+  if (status !== '' && status !== 'active') parts.push(status);
+  const stamp = recallStamp(entry?.created);
+  if (stamp) parts.push(stamp);
   const prefix = '- ' + String(entry?.id ?? '') + ' [' + parts.join(' · ') + '] ';
   const statement = String(entry?.statement ?? '');
   const room = Math.max(8, maxChars - prefix.length);
@@ -981,22 +1056,62 @@ export function createMemoryStore(options) {
   const reconcileBeforeRead = serialize(reconcilePending);
 
   /** 核对会话实际引用的少量条目；外部变化通过同一个变更流通知冻结快照。 */
+  /**
+   * 对账：把「外部改动/删除」同步进缓存。
+   *
+   * v10：原来是每个 id 两次内核直读（20 个 id = 40 次请求，每 30 秒一轮），现在先用
+   * 一条 SQL 取回全部 id 的现状；只有 SQL 里没命中的 id 才逐条直读确认——那可能是索引
+   * 滞后（写入后 ~2.4 秒），也可能真的被删了，两者必须分开。
+   */
   async function reconcile(ids = []) {
+    const wanted = [...new Set(ids)].slice(0, MEMORY_LIMITS.maxReadIds);
     const results = [];
-    for (const id of [...new Set(ids)].slice(0, MEMORY_LIMITS.maxReadIds)) {
+    if (wanted.length === 0) return { ok: true, value: { entries: results } };
+    const notebook = await resolveNotebook();
+    if (!notebook) return { ok: true, value: { entries: results } };
+    const rows = await query(buildReadStatement({ ids: wanted, box: notebook }));
+    /** @type {Map<string, { attrs: Record<string, string>, row: Record<string, any> }>} */
+    const grouped = new Map();
+    for (const id of wanted) grouped.set(id, { attrs: {}, row: { id } });
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const id = typeof row?.id === 'string' ? row.id : '';
+      const bucket = grouped.get(id);
+      if (bucket === undefined) continue;
+      if (row.content !== undefined || row.markdown !== undefined) bucket.row = { id, content: row.content, markdown: row.markdown, created: row.created };
+      if (typeof row.name === 'string' && row.name.startsWith('custom-mem-')) {
+        bucket.attrs[row.name] = typeof row.value === 'string' ? row.value : String(row.value ?? '');
+      }
+      if (row.name === undefined) {
+        for (const [key, attribute] of Object.entries(MEMORY_ATTRS)) {
+          if (Object.hasOwn(row, key)) bucket.attrs[attribute] = String(row[key] ?? '');
+        }
+      }
+    }
+    const accept = (id, current) => {
       const old = observedEntries.get(id);
+      absentIds.delete(id); externalEntries.set(id, current); observedEntries.set(id, current);
+      if (!old || memoryRevision(old) !== current.revision) {
+        changed(current);
+        if (old && (old.workspace !== current.workspace || old.project !== current.project)) changed({ ...old, status: 'revoked' });
+      }
+      results.push(current);
+    };
+    for (const id of wanted) {
+      const bucket = grouped.get(id);
+      if (bucket && bucket.attrs[MEMORY_ATTRS.type]) {
+        const mapped = toMemoryEntry(bucket.row, bucket.attrs);
+        const body = typeof bucket.row.markdown === 'string' && bucket.row.markdown.trim() !== ''
+          ? bucket.row.markdown
+          : String(bucket.row.content ?? '');
+        accept(id, view({ ...mapped, body: readableMemory(body) }));
+        continue;
+      }
+      // SQL 没命中：可能索引滞后，也可能真被删了——只有这种少数情况才逐条直读。
       try {
-        const current = await directEntry(id);
-        absentIds.delete(id); externalEntries.set(id, current); observedEntries.set(id, current);
-        if (!old || memoryRevision(old) !== current.revision) {
-          changed(current);
-          if (old && (old.workspace !== current.workspace || old.project !== current.project)) changed({ ...old, status: 'revoked' });
-        }
-        results.push(current);
+        accept(id, await directEntry(id));
       } catch (error) {
-        if (!['not_found', 'not_memory', 'wrong_notebook'].includes(error.code)) {
-          throw error;
-        }
+        if (!['not_found', 'not_memory', 'wrong_notebook'].includes(error.code)) throw error;
+        const old = observedEntries.get(id);
         absentIds.add(id); externalEntries.delete(id); pendingStates.delete(id); stateCheckedAt.delete(id); pendingAttrs.delete(id); forgetPending(id);
         if (old) changed({ ...old, status: 'revoked' });
       }
@@ -1122,6 +1237,13 @@ export function createMemoryStore(options) {
     }
   }
 
+  /** v10：回执里的「落点」——写入时到底绑到了哪个项目/工作区。 */
+  const placementOf = item => ({
+    project: item?.project ?? '*',
+    workspace: item?.workspace ?? '',
+    global: (item?.project ?? '*') === '*' && (item?.workspace ?? '') === '*',
+  });
+
   async function write(spec, authority = {}) {
     const checkAllowed = () => {
       if (spec?.signal?.aborted || (typeof spec?.canWrite === 'function' && !spec.canWrite())) throw new MemoryError('cancelled', '会话已取消、释放或停止记录，尚未开始的记忆写入已终止');
@@ -1199,11 +1321,11 @@ export function createMemoryStore(options) {
         // 提醒里要引用「被取代的那一条」自己的结论，不能用升级后条目的正文冒充。
         for (const old of olds) changed({ ...old, status: 'superseded', supersededBy: current.id });
         changed({ ...current, status: 'active', confidence: entry.confidence });
-        return { ok: true, value: withDoc({ id: current.id, status: 'active', promoted: true, superseded: plan.targets, duplicate: false }) };
+        return { ok: true, value: withDoc({ id: current.id, status: 'active', promoted: true, superseded: plan.targets, duplicate: false, placement: placementOf(current) }) };
       }
       if (targets.some(id => !idsOf(current.supersedes).includes(id))) throw new MemoryError('duplicate_requires_review', `同文条目 ${current.id} 已存在，但未完成所请求的取代；请读取后确认`);
       return { ok: true, value: withDoc({ id: current.id, status: current.status,
-        superseded: idsOf(current.supersedes), duplicate: true,
+        superseded: idsOf(current.supersedes), duplicate: true, placement: placementOf(current),
         disposition: current.status === 'candidate' ? 'candidate_exists' : 'active_exists' }) };
     };
     if (receipt?.complete) {
@@ -1244,7 +1366,7 @@ export function createMemoryStore(options) {
         const completed = { ...receipt, complete: true, phase: 'complete', completedAt: now() };
         try { await options.receipts?.set?.(fingerprint, completed); receipts.set(fingerprint, completed); }
         catch (error) { return { ok: false, error: { code: 'receipt_pending', message: '记忆已生效，但完成凭据尚未保存：' + error.message }, partial: { id: receipt.id, committed: true } }; }
-        return { ok: true, value: withDoc({ id: receipt.id, status: committed.status, superseded: targets, duplicate: true }) };
+        return { ok: true, value: withDoc({ id: receipt.id, status: committed.status, superseded: targets, duplicate: true, placement: placementOf(entry) }) };
       }
     }
     // 同一任务主题只留一条有效状态：没指定 supersedes 时自动取代旧状态，
@@ -1324,7 +1446,7 @@ export function createMemoryStore(options) {
       receipts.set(fingerprint, { ...receipt, complete: false, phase: 'committed' });
       return { ok: false, error: { code: 'receipt_pending', message: '记忆和取代关系已生效，完成凭据保存失败；重试将核对现有条目：' + error.message }, partial: { id, docId, committed: true } };
     }
-    return { ok: true, value: { id, docId, status: entry.status, superseded, statement: entry.statement, duplicate: false, ...(autoTargets && superseded.length ? { autoSuperseded: true } : {}) } };
+    return { ok: true, value: { id, docId, status: entry.status, superseded, statement: entry.statement, duplicate: false, placement: placementOf(entry), ...(autoTargets && superseded.length ? { autoSuperseded: true } : {}) } };
   }
 
 
@@ -1409,17 +1531,22 @@ export function createMemoryStore(options) {
   async function cleanupReceipts() {
     const stored = await options.receipts?.list?.() ?? [];
     let removed = 0, retained = 0;
+    const reasons = { incomplete: 0, recent: 0, fingerprint: 0, limit: 0 };
     for (const receipt of stored) {
-      if (!receipt?.complete || !receipt.id || now() - (receipt.completedAt ?? parseStamp(receipt.created) ?? now()) < 86_400_000) { retained++; continue; }
-      if (removed >= 100) { retained++; continue; }
+      // v10：已回滚的凭据同样是垃圾（v9 之前「清理」对它们永远返回 0）。
+      const rolledBack = receipt?.phase === 'rolled_back';
+      if ((!receipt?.complete && !rolledBack) || !receipt.id) { retained++; reasons.incomplete++; continue; }
+      if (now() - (receipt.completedAt ?? parseStamp(receipt.created) ?? now()) < 86_400_000) { retained++; reasons.recent++; continue; }
+      if (rolledBack) { await clearReceipt(receipt.key); removed++; continue; }
+      if (removed >= 100) { retained++; reasons.limit++; continue; }
       const notebook = await resolveNotebook();
       const rows = notebook ? await query(buildListStatement({ box: notebook, fingerprint: receipt.key, limit: 25 })) : [];
-      if (!rows.some(row => row.id === receipt.id && row.fingerprint === receipt.key)) { retained++; continue; }
+      if (!rows.some(row => row.id === receipt.id && row.fingerprint === receipt.key)) { retained++; reasons.fingerprint++; continue; }
       const current = await directEntry(receipt.id);
-      if (memoryFingerprint(current) !== receipt.key) { retained++; continue; }
+      if (memoryFingerprint(current) !== receipt.key) { retained++; reasons.fingerprint++; continue; }
       await clearReceipt(receipt.key); removed++;
     }
-    return { ok: true, value: { removed, retained } };
+    return { ok: true, value: { removed, retained, retainedReasons: reasons } };
   }
 
   async function search(input = {}) {
@@ -1432,7 +1559,8 @@ export function createMemoryStore(options) {
     const accepts = entry => (!status ? ['active', 'candidate'].includes(entry.status) : entry.status === status) &&
       (!type || entry.type === type) && (!project || entry.project === project) &&
       (!input.scope || applicableMemory(entry, input.scope)) && (!input.trusted || trusted(entry)) && (!input.currentOnly || !assessMemory(entry, now()).reviewRequired);
-    let tokens = needle.toLowerCase().split(/\s+/u).filter(token => [...token].length >= MEMORY_LIMITS.minTokenChars);
+    // v9：整句中文按二元组展开（见 queryTokens）；极短查询仍按原样做内存匹配。
+    let tokens = queryTokens(needle);
     if (!tokens.length && needle) tokens = [needle.toLowerCase()];
     const candidates = pendingEntries().filter(accepts);
     const matches = (entry, relaxed = false) => {
@@ -1445,15 +1573,22 @@ export function createMemoryStore(options) {
       const notebook = await resolveNotebook(requestOptions);
       if (!notebook) { rows = []; availability = 'uninitialized'; }
       else {
-        const base = { box: notebook, type, project, status, limit, scope: input.scope, trusted: input.trusted };
+        // 多取一条：用来判断「结果是否被 limit 截断」（v8 之前 complete 硬编码为 true）。
+        // 多取一条用于判断截断：上限放行 +1，否则 limit=25 时 complete 永远是 true（假完整）。
+        const probeLimit = Math.min(MEMORY_LIMITS.maxSearchLimit + 1, limit + 1);
+        const base = { box: notebook, type, project, status, limit: probeLimit, scope: input.scope, trusted: input.trusted };
         const expression = ftsExpression(needle);
         if (!needle) rows = await query(buildFilterStatement(base), requestOptions);
         else if (expression) {
           try {
-            source = 'fts'; rows = await query(buildFtsSearchStatement({ ...base, expression }), requestOptions);
+            // 只有「整句展开」的查询才按 rank（相关度）排：短关键词保持 v8 的「当前项目 + 时间」，
+            // 免得把一个用户已经习惯的「面板」查询的最对题条目从第 2 位排到第 8 位（2026-11-19 实测）。
+            // FTS5 的 rank 越小越相关，同分取新。
+            const ranked = queryExpanded(needle);
+            source = 'fts'; rows = await query(buildFtsSearchStatement({ ...base, expression, ranked }), requestOptions);
             const relaxed = ftsExpression(needle, 'or');
             if (!rows.length && !fresh.length && relaxed !== expression) {
-              source = 'fts-or'; rows = await query(buildFtsSearchStatement({ ...base, expression: relaxed }), requestOptions);
+              source = 'fts-or'; rows = await query(buildFtsSearchStatement({ ...base, expression: relaxed, ranked }), requestOptions);
               fresh = candidates.filter(entry => matches(entry, true));
             }
           } catch { source = 'like'; rows = await query(buildLikeSearchStatement({ ...base, needle }), requestOptions); }
@@ -1470,8 +1605,11 @@ export function createMemoryStore(options) {
       const entry = cached ?? { ...row, body: readableMemory(row.markdown || row.content), status: row.status ?? 'active', fresh: false };
       if (!merged.has(row.id) && accepts(entry)) merged.set(row.id, searchView(entry));
     }
-    const ordered = [...merged.values()].sort(compareEntries(input.scope));
-    return { ok: true, value: { results: ordered.slice(0, limit), source, availability, complete: true } };
+    // FTS 命中保持 SQL 的 rank 顺序（相关度优先）；浏览/ LIKE 兜底才按「当前项目 + 时间」重排。
+    const ordered = (source === 'fts' || source === 'fts-or') && queryExpanded(needle)
+      ? [...merged.values()]
+      : [...merged.values()].sort(compareEntries(input.scope));
+    return { ok: true, value: { results: ordered.slice(0, limit), source, availability, complete: ordered.length <= limit } };
   }
 
   /**
@@ -1528,7 +1666,64 @@ export function createMemoryStore(options) {
    * @param {readonly string[]} ids
    * @returns {Promise<{ ok: true, value: { entries: Array<Record<string, any>> } }>}
    */
-  async function read(ids) {
+  /** 全库各状态条数：面板徽标与候选计数用，不受 200 条窗口影响。 */
+  async function statusCounts() {
+    const counts = { active: 0, candidate: 0, superseded: 0, revoked: 0 };
+    const notebook = await resolveNotebook();
+    if (!notebook) return { ok: true, value: counts };
+    const rows = await query(`SELECT s.value AS status, COUNT(*) AS n FROM blocks b JOIN attributes s ON s.block_id = b.id AND s.name = ${sqlString(MEMORY_ATTRS.status)} WHERE b.box = ${sqlString(notebook)} GROUP BY s.value;`);
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const status = String(row?.status ?? '');
+      if (Object.hasOwn(counts, status)) counts[status] = Number(row.n) || 0;
+    }
+    return { ok: true, value: counts };
+  }
+
+  /** 面板输入框的候选值：记忆库里出现过的项目与工作区（`*` 不列）。 */
+  async function scopes() {
+    const notebook = await resolveNotebook();
+    if (!notebook) return { ok: true, value: { workspaces: [], projects: [] } };
+    const rows = await query([
+      "SELECT DISTINCT p.value AS project, w.value AS workspace",
+      "FROM blocks b",
+      `JOIN attributes p ON p.block_id = b.id AND p.name = ${sqlString(MEMORY_ATTRS.project)}`,
+      `LEFT JOIN attributes w ON w.block_id = b.id AND w.name = ${sqlString(MEMORY_ATTRS.workspace)}`,
+      `WHERE b.box = ${sqlString(notebook)} AND p.value <> '*'`,
+      "ORDER BY p.value LIMIT 200;",
+    ].join("\n"));
+    const projects = new Set(), workspaces = new Set();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (row.project) projects.add(String(row.project));
+      const workspace = String(row.workspace ?? '');
+      if (workspace && workspace !== '*' && workspace !== 'unassigned') workspaces.add(workspace);
+    }
+    return { ok: true, value: { workspaces: [...workspaces].slice(0, 50), projects: [...projects].slice(0, 50) } };
+  }
+
+  /**
+   * 引用计数与最后阅读时间：一次读只写一次。
+   *
+   * v10：原来每条一次 setBlockAttrs（20 条 = 20 次内核写），失败还静默；现在优先一次
+   * batchSetBlockAttrs，接口不支持再退回逐个写，并返回真正写成功的条数。
+   */
+  async function writeReadCounts(bumps, stamp) {
+    if (bumps.length === 0) return 0;
+    const idAttrs = bumps.map(item => ({ id: item.id, attrs: { [MEMORY_ATTRS.refcount]: String(item.refcount), [MEMORY_ATTRS.lastread]: stamp } }));
+    try {
+      const batched = await call('/api/attr/batchSetBlockAttrs', { idAttrs });
+      if (batched.ok && batched.value?.code === 0) return idAttrs.length;
+    } catch { /* 退回逐个写 */ }
+    let written = 0;
+    for (const item of idAttrs) {
+      try {
+        const one = await call('/api/attr/setBlockAttrs', item);
+        if (one.ok && one.value?.code === 0) written += 1;
+      } catch { /* 计数是锦上添花，失败不影响这次读取 */ }
+    }
+    return written;
+  }
+
+  async function read(ids, authority = {}) {
     pruneRing();
     const wanted = (Array.isArray(ids) ? ids : [])
       .filter((id) => typeof id === "string" && id !== "")
@@ -1563,6 +1758,8 @@ export function createMemoryStore(options) {
       }
     }
     const entries = [];
+    // v10：计数不再边读边写，先收集，最后一次性写；关闭记录时不写。
+    const bumps = [];
     for (const [id, bucket] of grouped) {
       const cached = externalEntries.get(id) ?? ring.find((entry) => entry.id === id) ?? pendingStates.get(id);
       if (cached !== undefined) {
@@ -1578,16 +1775,12 @@ export function createMemoryStore(options) {
       const entry = { ...mapped, body: readableMemory(body) };
       entries.push(view(entry));
       // 引用计数是"锦上添花"：失败只记日志，绝不拖累这次读取。
-      const stamp = siyuanStamp(new Date(now()));
-      void call("/api/attr/setBlockAttrs", {
-        id,
-        attrs: {
-          [MEMORY_ATTRS.refcount]: String(Number(bucket.attrs[MEMORY_ATTRS.refcount] ?? 0) + 1),
-          [MEMORY_ATTRS.lastread]: stamp,
-        },
-      }).catch(() => {});
+      bumps.push({ id, refcount: Number(bucket.attrs[MEMORY_ATTRS.refcount] ?? 0) + 1 });
     }
-    return { ok: true, value: { entries, missing: wanted.filter(id => !entries.some(entry => entry.id === id)), complete: true } };
+    // 关闭记录 / 已取消时不写库："只读"的 memory_read 不该在用户要求别记之后还改数据。
+    const canCount = typeof authority.canWrite === 'function' ? authority.canWrite() === true : authority.canWrite !== false;
+    const counted = canCount && bumps.length ? await writeReadCounts(bumps, siyuanStamp(new Date(now()))) : 0;
+    return { ok: true, value: { entries, missing: wanted.filter(id => !entries.some(entry => entry.id === id)), complete: true, counted } };
   }
 
   /**
@@ -1647,15 +1840,19 @@ export function createMemoryStore(options) {
     const project = typeof input.project === "string" && input.project.trim() !== "" ? input.project.trim() : undefined;
     const requested = Number(input.limit);
     const limit = Number.isFinite(requested) ? Math.max(1, Math.min(MEMORY_LIMITS.maxListLimit, Math.trunc(requested))) : MEMORY_LIMITS.maxListLimit;
+    const offset = Number.isFinite(Number(input.offset)) ? Math.max(0, Math.min(100_000, Math.trunc(Number(input.offset)))) : 0;
 
     /** @type {Array<Record<string, any>>} */
     let entries = [];
     let complete = true;
     if (notebook !== null) {
-      const rows = await query(buildListStatement({ box: notebook, type, project, status, limit, scope: input.scope, trusted: input.trusted, workspace: input.workspace, topic: input.topic, topicId: input.topicId, projects: input.projects }), requestOptions);
-      if (rows.length >= limit) complete = false;
+      // 多取一条用来判断「还有没有下一页」：LIMIT 本身会把结果截到 limit，光看长度判断不出来。
+      // 上限放行 +1（v10 修：原来 limit=200 时 probe 被钳回 200，hasMore 恒 false）。
+      const probeLimit = limit + 1;
+      const rows = await query(buildListStatement({ box: notebook, type, project, status, limit: probeLimit, offset, order: input.order, scope: input.scope, trusted: input.trusted, workspace: input.workspace, topic: input.topic, topicId: input.topicId, projects: input.projects }), requestOptions);
+      if (rows.length > limit) complete = false;
       for (const row of Array.isArray(rows) ? rows : []) {
-        if (pendingEntries().some((entry) => entry.id === row.id)) continue;
+        if (offset === 0 && pendingEntries().some((entry) => entry.id === row.id)) continue;
         const body =
           typeof row.markdown === "string" && row.markdown.trim() !== "" ? row.markdown : String(row.content ?? "");
         entries.push({
@@ -1680,7 +1877,7 @@ export function createMemoryStore(options) {
     }
     // 写穿缓存里还没进索引的条目补在最前面，否则面板上「刚记的」会消失两秒。
     const seen = new Set(entries.map((entry) => entry.id));
-    for (const cached of pendingEntries().reverse()) {
+    for (const cached of offset === 0 ? pendingEntries().reverse() : []) {
       if (seen.has(cached.id)) continue;
       if (type && cached.type !== type) continue;
       if (project && cached.project !== project) continue;
@@ -1694,8 +1891,13 @@ export function createMemoryStore(options) {
       (!input.scope || applicableMemory(entry, input.scope)) && (!input.trusted || trusted(entry)) && (!input.currentOnly || !assessMemory(entry, now()).reviewRequired) &&
       (input.workspace === undefined || entry.workspace === input.workspace) && (input.topic === undefined || (input.topicId ? memoryTopicId(entry) === input.topicId : canonicalTopic(entry.topic) === canonicalTopic(input.topic))) &&
       (!input.topicId || memoryTopicId(entry) === input.topicId) && (!input.projects || input.projects.includes(entry.project)));
-    entries.sort(compareEntries(input.scope));
-    return { ok: true, value: { entries: entries.slice(0, limit).map(view), box: notebook, complete: complete && entries.length <= limit, limit, availability: notebook ? "available" : "uninitialized" } };
+    // order=oldest 是「最老的候选先处理」：再按 compareEntries 排一次会把顺序翻回去。
+    entries.sort(input.order === 'oldest'
+      ? (a, b) => String(a.created ?? '').localeCompare(String(b.created ?? '')) || String(a.id).localeCompare(String(b.id))
+      : compareEntries(input.scope));
+    // SQL 已经按 offset 取过一页了，这里只切到 limit（v10 修：原来又 slice(offset, …)，等于跳过两倍偏移）。
+    const hasMore = !complete || entries.length > limit;
+    return { ok: true, value: { entries: entries.slice(0, limit).map(view), box: notebook, complete: !hasMore, limit, offset, hasMore, availability: notebook ? "available" : "uninitialized" } };
   }
 
   /**
@@ -1781,6 +1983,21 @@ export function createMemoryStore(options) {
     return { ok: true, value: { candidate, conflicts, selection, topics: directory?.value.topics ?? [] } };
   }
 
+  /** 同主题、同范围的其它候选（type=state 才分组）：确认一条后它们应一并作废。 */
+  async function siblingCandidates(validated, selfId) {
+    if (validated.type !== 'state' || !validated.topic) return { list: [], truncated: false };
+    const topicId = memoryTopicId(validated);
+    // 过滤下推到 SQL（同项目 + 同工作区），别在 200 条候选窗口里靠 JS 过滤：
+    // 候选一旦积压过 200 条，同主题兄弟会落在窗口外，作废静默失效（2026-11-19 验证发现）。
+    const listed = await list({ type: 'state', status: 'candidate', project: validated.project,
+      workspace: scopePath(validated.workspace), limit: MEMORY_LIMITS.maxListLimit });
+    const list_ = listed.value.entries
+      .filter(item => item.id !== selfId && item.project === validated.project &&
+        scopePath(item.workspace) === scopePath(validated.workspace) && memoryTopicId(item) === topicId)
+      .sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    return { list: list_, truncated: listed.value.complete === false };
+  }
+
   async function approve(input, authority = {}) {
     const checkAllowed = () => {
       if (authority.signal?.aborted || (typeof authority.canWrite === 'function' && !authority.canWrite())) throw new MemoryError('cancelled', '确认已取消或记录已关闭，尚未执行的修改已停止');
@@ -1791,7 +2008,8 @@ export function createMemoryStore(options) {
     if (entry.status !== 'candidate' && !(entry.status === 'active' && entry.reviewRequired)) throw new MemoryError('invalid_status', '只有候选或待复核记忆可以确认');
     if (!['stated', 'verified'].includes(input.confidence)) throw new MemoryError('invalid_confidence', '确认时必须明确 stated 或 verified');
     const { project, workspace, topic, topicId, subjectChanged } = await approvalSelection(entry, input);
-    const validated = validateMemory({ ...entry, ...input, project, workspace, topic, topicId, status: 'active', source: entry.source || authority.source, body: input.body ?? entry.body });
+    // 历史候选可能没有 source（v4 之前的条目）：面板点「确认生效」不该永远 400 invalid_source。
+    const validated = validateMemory({ ...entry, ...input, project, workspace, topic, topicId, status: 'active', source: entry.source || authority.source || 'panel:approve', body: input.body ?? entry.body });
     const targets = [...new Set(input.supersedes ?? [])];
     if (targets.length > MEMORY_LIMITS.maxSupersedes || targets.some(id => !/^[0-9]{14}-[a-z0-9]{7}$/u.test(id))) throw new MemoryError('invalid_targets', '一次最多取代 5 个合法条目 ID');
     if (validated.body !== entry.body) {
@@ -1803,6 +2021,13 @@ export function createMemoryStore(options) {
     }
     await validateTargets(validated, targets, input.expectedRevisions);
     await checkStateConflict(validated, [...targets, entry.id]);
+    // v10：同主题的其它候选一并作废。否则「逐条确认」会互相覆盖，最后活下来的是最旧那版。
+    // 取代链有上限：给 keep 已有的前驱与本次 targets 留位置，宁可不收敛也不写单向链接。
+    const siblings = await siblingCandidates(validated, entry.id);
+    const room = Math.max(0, MEMORY_LIMITS.maxSupersedes - (idsOf(entry.supersedes).length + targets.length));
+    const staleCandidates = siblings.list.slice(0, room).map(item => item.id);
+    const skippedCandidates = Math.max(0, siblings.list.length - staleCandidates.length);
+    const candidatesTruncated = siblings.truncated;
     const transaction = mutation('approve', input);
     try {
       checkAllowed();
@@ -1816,6 +2041,10 @@ export function createMemoryStore(options) {
         checkAllowed();
         await transaction.patch(old, { status: 'superseded', supersededBy: entry.id });
       }
+      for (const staleId of staleCandidates) {
+        checkAllowed();
+        await transaction.patch(staleId, { status: 'superseded', supersededBy: entry.id });
+      }
       checkAllowed();
       await transaction.patch(entry.id, { status: 'active' });
     } catch (error) {
@@ -1827,7 +2056,9 @@ export function createMemoryStore(options) {
     changed({ ...entry, ...validated, status: 'active', originSessionId: input.originSessionId });
     let warning;
     try { await transaction.commit(); } catch { warning = '确认已生效，但恢复记录尚未完成归档；可在写入恢复中核对'; }
-    return { ok: true, value: { id: entry.id, status: 'active', approvedBy: validated.approvedBy, superseded: targets, ...(warning ? { warning } : {}) } };
+    for (const staleId of staleCandidates) changed({ ...entry, id: staleId, status: 'superseded', supersededBy: entry.id });
+    return { ok: true, value: { id: entry.id, status: 'active', approvedBy: validated.approvedBy, superseded: targets,
+      supersededCandidates: staleCandidates, ...(skippedCandidates ? { skippedCandidates } : {}), ...(candidatesTruncated ? { candidatesTruncated: true } : {}), ...(warning ? { warning } : {}) } };
   }
 
   /** 给模型和确认面板复用的主题目录；不按语义相似度擅自合并。 */
@@ -1913,13 +2144,15 @@ export function createMemoryStore(options) {
    * @param {{ now?: number, staleStateDays?: number, idleDays?: number }} [options]
    * @returns {Promise<{ ok: true, value: {
    *   total: number,
+   *   libraryTotal: number,
    *   active: number,
    *   duplicates: Array<{ statement: string, ids: string[] }>,
    *   similar: Array<{ left: string, right: string, score: number }>,
    *   staleStates: Array<{ id: string, statement: string, ageDays: number }>,
    *   brokenChains: Array<{ id: string, statement: string, reason: string }>,
    *   archiveCandidates: Array<{ id: string, statement: string, refcount: number, reason: string }>,
-   *   topicDrift: Array<{ project: string, workspace: string, topics: Array<{ id: string, topic: string, created: string, statement: string }> }>
+   *   multiStateProjects: Array<{ project: string, workspace: string, topics: Array<{ id: string, topic: string, created: string, statement: string }> }>,
+   *   incomplete: string[]
    * } }>}
    */
   async function checkup(options = {}) {
@@ -1928,6 +2161,20 @@ export function createMemoryStore(options) {
     const idleMs = (Number.isFinite(options.idleDays) ? options.idleDays : 90) * 86_400_000;
 
     const listed = await list({ limit: MEMORY_LIMITS.maxListLimit, scope: options.scope, project: options.project });
+    // 面板横幅要说「已检查 200 / 全库 397」：list() 只给窗口内的条目，全库总数另数一次。
+    // 只在样本不完整时数（完整时总数就等于 entries.length），数不出来就退回窗口大小——
+    // 统计失败不能让整个体检失败。
+    let libraryTotal = listed.value.entries.length;
+    if (!listed.value.complete) {
+      try {
+        const boxId = await resolveNotebook();
+        if (boxId) {
+          const counted = await query("SELECT COUNT(*) AS n FROM blocks b JOIN attributes t ON t.block_id = b.id AND t.name = " + sqlString(MEMORY_ATTRS.type) + " WHERE b.box = " + sqlString(boxId) + ";");
+          const n = Number(counted?.[0]?.n);
+          if (Number.isFinite(n) && n > 0) libraryTotal = n;
+        }
+      } catch { /* 数不出来就用窗口大小 */ }
+    }
     const entries = listed.value.entries;
     const active = entries.filter((entry) => entry.status === "active");
 
@@ -2007,8 +2254,9 @@ export function createMemoryStore(options) {
       });
     }
 
-    // 6) 主题漂移：同 project + workspace 下有多条 active state，但主题不止一个。
-    //    只报告、不自动合并——合并要同时改取代链两端，属于用户决策。
+    // 6) 同项目多任务状态：同 project + workspace 下有多条 active state、主题不止一个。
+    //    v8 起只做**中性统计**（一个项目并行几件事是常态，不是病）：不提供任何批量作废入口，
+    //    也不隐含「该清理」。真实的整理诉求走「显式合并正文」，另立契约。
     const stateGroups = new Map();
     for (const entry of active) {
       if (entry.type !== 'state') continue;
@@ -2017,7 +2265,7 @@ export function createMemoryStore(options) {
       if (bucket === undefined) stateGroups.set(key, [entry]);
       else bucket.push(entry);
     }
-    const topicDrift = [];
+    const multiStateProjects = [];
     for (const bucket of stateGroups.values()) {
       const topics = new Map();
       for (const entry of bucket) {
@@ -2025,9 +2273,11 @@ export function createMemoryStore(options) {
         if (!topics.has(topicId)) topics.set(topicId, entry);
       }
       if (topics.size <= 1) continue;
-      topicDrift.push({ project: bucket[0].project, workspace: bucket[0].workspace,
+      multiStateProjects.push({ project: bucket[0].project, workspace: bucket[0].workspace,
         topics: [...topics.values()].map(entry => ({ id: entry.id, topic: entry.topic ?? '', created: entry.created ?? '', statement: entry.statement })) });
     }
+    // 主题最多的项目排前面：一眼看出「哪个项目在并行多少件事」。
+    multiStateProjects.sort((a, b) => b.topics.length - a.topics.length || a.project.localeCompare(b.project));
 
     return {
       ok: true,
@@ -2035,79 +2285,19 @@ export function createMemoryStore(options) {
         complete: listed.value.complete,
         scannedLimit: MEMORY_LIMITS.maxListLimit,
         total: entries.length,
+        libraryTotal,
         active: active.length,
         duplicates,
         similar: similar.slice(0, 20),
         staleStates,
         brokenChains,
         archiveCandidates,
-        topicDrift,
+        multiStateProjects,
+        // 样本不完整（complete === false）时，依赖「全库视图」的判断没有真正检查过：
+        // 不能报 0 假装查过，也不能凭 200 条窗口误报。面板按这个清单标注「未检查」。
+        incomplete: listed.value.complete ? [] : ['brokenChains.missing-target'],
       },
     };
-  }
-
-  /**
-   * 主题漂移收敛：把一个项目里「同主题只留一条有效状态」这件事一次做完。
-   *
-   * 背景（v7-A）：`checkup().topicDrift` 只报告不改数据——合并要同时改取代链两端，
-   * 属于用户决策。面板上「只保留最新」按下去之后走这里。
-   *
-   * 规则（有意保守）：
-   * - keep 必须是**有效且有 topic 的 state**；项目与工作区从 keep 自身取值，
-   *   请求里带了就必须一致（防止面板拿着过期分组收敛错项目）。
-   * - 只有同 project + workspace 的 active state 会被看；组内主题去重后 ≤1 条 → `noDrift`，
-   *   一个字节都不改（幂等，面板连点两次不会报错）。
-   * - 只作废 **比 keep 更旧**（created 更小）的 active 状态；比它新的不动，
-   *   免得把「最新」误标掉。一次最多 `maxSupersedes` 条，并且给 keep 的 supersedes
-   *   留出位置——取代链超过上限宁可不收敛，也不写单向链接。
-   * - 旧条目与 keep 的属性修改在同一个 `mutation('collapse')` 事务里，失败按记录逆向回滚。
-   *
-   * @param {{ project?: string, workspace?: string, keepId: string, expectedRevision?: string, signal?: AbortSignal, canWrite?: () => boolean }} input
-   * @returns {Promise<{ ok: true, value: { id: string, kept: { id: string, topic: string }, superseded: string[], noDrift?: true, skipped?: number } } | { ok: false, error: { code: string, message: string } } | { ok: false, error: { code: string, message: string }, recovery?: { key: string, ids: string[] } }>}
-   */
-  async function collapseTopicDrift(input = {}) {
-    const keepId = String(input?.keepId ?? '').trim();
-    if (!/^[0-9]{14}-[a-z0-9]{7}$/u.test(keepId)) throw new MemoryError('invalid_keep', '要保留的条目 id 形状不对');
-    const keep = await directEntry(keepId);
-    if (keep.type !== 'state') throw new MemoryError('invalid_keep', '只能收敛 state（当前状态）类记忆');
-    if (keep.status !== 'active') throw new MemoryError('invalid_keep', '要保留的条目必须仍然有效');
-    if (!keep.topic) throw new MemoryError('invalid_keep', '要保留的状态没有任务主题，无法判断哪些是同一任务');
-    if (input?.expectedRevision && input.expectedRevision !== keep.revision) throw new MemoryError('revision_conflict', '保留条目已变化，请重新读取体检结果');
-    if (input?.project && input.project !== keep.project) throw new MemoryError('scope_mismatch', '保留条目的项目与请求不一致，请重新读取体检结果');
-    if (input?.workspace && scopePath(input.workspace) !== scopePath(keep.workspace)) throw new MemoryError('scope_mismatch', '保留条目的工作区与请求不一致，请重新读取体检结果');
-    const kept = { id: keep.id, topic: keep.topic };
-    const listed = await list({ type: 'state', status: 'active', project: keep.project, limit: MEMORY_LIMITS.maxListLimit });
-    const siblings = listed.value.entries.filter(entry => entry.type === 'state' && entry.status === 'active' &&
-      entry.project === keep.project && scopePath(entry.workspace) === scopePath(keep.workspace));
-    const topics = new Set(siblings.map(entry => memoryTopicId(entry)));
-    if (topics.size <= 1) return { ok: true, value: { id: keep.id, kept, superseded: [], noDrift: true } };
-    // created 属性缺失时用 id 前缀兜底：思源的块 id 前 14 位就是创建时间戳，迁移来的老条目可能没写属性。
-    const stampOf = entry => {
-      const created = String(entry.created ?? '');
-      if (created !== '') return created;
-      const id = String(entry.id ?? '');
-      return /^[0-9]{14}/u.test(id) ? id.slice(0, 14) : '';
-    };
-    const keepStamp = stampOf(keep);
-    const older = siblings
-      .filter(entry => entry.id !== keep.id && keepStamp !== '' && stampOf(entry) !== '' && stampOf(entry) < keepStamp)
-      .sort((a, b) => stampOf(a).localeCompare(stampOf(b)));
-    // 取代链本身有上限：给 keep 已经记着的前驱留出位置，宁可少收敛也不写单向链接。
-    const room = Math.max(0, MEMORY_LIMITS.maxSupersedes - idsOf(keep.supersedes).length);
-    const stale = older.slice(0, Math.min(room, MEMORY_LIMITS.maxSupersedes));
-    if (!stale.length) return { ok: true, value: { id: keep.id, kept, superseded: [], ...(older.length ? { skipped: older.length } : {}) } };
-    const transaction = mutation('collapse', { id: keep.id, expectedRevision: input?.expectedRevision, supersedes: stale.map(entry => entry.id), signal: input?.signal, canWrite: input?.canWrite });
-    try {
-      for (const old of stale) await transaction.patch(old.id, { status: 'superseded', supersededBy: keep.id });
-      await transaction.patch(keep.id, { supersedes: [...new Set([...idsOf(keep.supersedes), ...stale.map(entry => entry.id)])].join(',') });
-      await transaction.commit();
-    } catch (error) {
-      const failed = await transaction.rollback();
-      return { ok: false, error: { code: failed.length ? 'chain_incomplete' : error.code ?? 'collapse_failed', message: `主题漂移收敛未完成：${error.message}${failed.length ? '；需核对：' + failed.join('、') : '；已恢复原状态，可重试'}` }, ...(failed.length ? { recovery: { key: transaction.key, ids: failed } } : {}) };
-    }
-    // 让别的会话看到「这些旧状态已经失效」；保留项本身没变内容，不必再播一条。
-    for (const old of stale) changed({ ...old, status: 'superseded', supersededBy: keep.id });
-    return { ok: true, value: { id: keep.id, kept, superseded: stale.map(entry => entry.id), ...(older.length > stale.length ? { skipped: older.length - stale.length } : {}) } };
   }
 
   /**
@@ -2226,9 +2416,10 @@ export function createMemoryStore(options) {
 
   async function buildSnapshotText(scope, timeoutMs) {
     const effectiveScope = scope ?? { project: '*', projectRoots: {} };
-    const projects = scope?.project === '*' ? scope.projects?.filter(name => name !== '*').join(' / ') : scope?.project;
+    // v8：项目清单按「个数」折叠，不再对拼好的整串硬 slice —— 硬切会切出半截项目名。
+    const projects = scope?.project === '*' ? (scope.projects ?? []).filter(name => name !== '*') : (scope?.project ? [scope.project] : []);
     const lines = ['[记忆] 历史资料，当前要求优先；要全文用 memory_search / memory_read，新结论用 memory_write 记下来。',
-      '当前项目：' + (projects || '仅全局').slice(0, 100) + '；通用内容填 *。'];
+      '当前项目：' + projectSummaryLine(projects) + '；通用内容填 *。'];
     try {
       const kinds = ['state', 'preference', 'decision', 'fact'];
       const [lists, directory] = await Promise.all([
@@ -2244,45 +2435,63 @@ export function createMemoryStore(options) {
       const facts = lists[3].value.entries;
       const proven = [...facts].filter(entry => entry.refcount > 0).sort((a, b) => b.refcount - a.refcount).slice(0, 2);
       const picks = [lists[0].value.entries, lists[1].value.entries, lists[2].value.entries, [...proven, ...facts.filter(entry => !proven.includes(entry))]];
-      const labels = ['待办', '偏好', '最近决策', '踩过的坑与事实'], quota = [3, 6, 4, 4];
+      const labels = ['当前状态', '偏好', '最近决策', '踩过的坑与事实'], quota = [3, 6, 4, 4];
       const tail = '其他项目和历史条目请按需检索；未命中不代表从未记录。';
-      const candidateBlock = candidates.length ? '候选（未核实）：\n' + candidates.slice(0, 2).map(entry => `- [${entry.project.slice(0, 24)} | ${entry.confidence}] ${entry.statement.slice(0, 50)}`).join('\n') : '';
-      // 结尾提示、候选摘要先留出预算；条目每类轮流分配，任务状态先获得空间；标题每类只写一次。
+      // v9：候选块改到最后分配——v8 它先占约 192 字，把「最近决策 / 坑」的第 3、4 条挤掉了。
+      const candidateHeader = '候选（未核实）：';
+      const candidateText = list => candidateHeader + '\n' + list.map(entry => `- [${clipLabel(entry.project, 22)} | ${entry.confidence}] ${clipLabel(entry.statement, 48)}`).join('\n');
+      // 结尾提示先留出预算；条目每类轮流分配，任务状态先获得空间；标题每类只写一次。
       let budget = MEMORY_LIMITS.sectionMaxChars - lines.reduce((sum, line) => sum + line.length + 1, 0) - tail.length - 1 -
-        (candidateBlock ? candidateBlock.length + 1 : 0) - (uninitialized ? 12 : 0);
+        (uninitialized ? 12 : 0);
       // v7-C：每个类目内按项目分组——项目名只在组头写一次，条目行只留主题/可信度。
       // 真实库里 14 条条目的项目名原来重复占了 227 字；省下来的预算让事实类能多进一条。
       const chosen = labels.map(() => []);
       const grouped = labels.map(() => new Set());
-      // 分配顺序：待办 → 偏好 → 事实 → 决策。
-      // 待办排第一是既定语义（任务状态先获得空间）；事实排在决策之前是有意的——
+      // 分配顺序：当前状态 → 偏好 → 事实 → 决策。
+      // 状态排第一是既定语义（任务状态先获得空间）；事实排在决策之前是有意的——
       // 事实池最大（真实库 41 条 vs 决策 19 条）却被挤到只剩 3 条，而分组省下的字
       // 原先正好被决策的第 4 条吃掉。决策的半衰期更长但复用率更低，让事实先拿这条位置。
       const order = [0, 1, 3, 2];
       for (let offset = 0; offset < 6; offset++) for (const index of order) {
         const entry = offset < quota[index] ? picks[index][offset] : undefined;
         if (!entry) continue;
-        const project = String(entry.project || '*').slice(0, 24);
+        const project = clipLabel(entry.project || '*', 22);
         // 方括号里只留主题与（非默认的）可信度：项目名已经在组头上，不必每行重复。
-        const badge = [entry.topic ? entry.topic.slice(0, 24) : '', entry.confidence && entry.confidence !== 'stated' ? entry.confidence : ''].filter(Boolean);
+        const badge = [entry.topic ? clipLabel(entry.topic, 22) : '', entry.confidence && entry.confidence !== 'stated' ? entry.confidence : ''].filter(Boolean);
         const head = '  - ' + (badge.length ? '[' + badge.join(' | ') + '] ' : '');
         const labelCost = chosen[index].length ? 0 : labels[index].length + 2;
         const heading = grouped[index].has(project) ? 0 : ('- ' + project).length + 1;
         let body = entry.statement.slice(0, 80) + (entry.statement.length > 80 ? '…' : '');
-        let cost = labelCost + heading + head.length + body.length + 1;
+        // v9：state 的「下一步」带上屏——蒸馏要求写这一段，但 v8 只渲染第一行，等于白写。
+        let nextStep = entry.type === 'state' ? nextStepText(entry.body) : '';
+        let cost = labelCost + heading + head.length + body.length + 1 + (nextStep ? NEXT_STEP_PREFIX.length + nextStep.length + 1 : 0);
         if (cost > budget) {
-          // 剩余预算还够一句话就截断收录这一条，而不是整条丢掉、把预算空在那里。
-          const room = budget - labelCost - heading - head.length - 1;
-          if (room < MIN_TRUNCATED_BODY) continue;
-          body = entry.statement.slice(0, room - 1) + '…';
+          // 先舍掉「下一步」那一行，再考虑截断正文：多一行不该让整条被挤掉。
+          nextStep = '';
           cost = labelCost + heading + head.length + body.length + 1;
-          if (cost > budget) continue;
+          if (cost > budget) {
+            // 剩余预算还够一句话就截断收录这一条，而不是整条丢掉、把预算空在那里。
+            const room = budget - labelCost - heading - head.length - 1;
+            if (room < MIN_TRUNCATED_BODY) continue;
+            body = entry.statement.slice(0, room - 1) + '…';
+            cost = labelCost + heading + head.length + body.length + 1;
+            if (cost > budget) continue;
+          }
         }
         if (heading) { chosen[index].push('- ' + project); grouped[index].add(project); }
         chosen[index].push(head + body);
+        if (nextStep) chosen[index].push(NEXT_STEP_PREFIX + nextStep);
         budget -= cost;
       }
       for (const [index, label] of labels.entries()) if (chosen[index].length) lines.push(label + '：\n' + chosen[index].join('\n'));
+      // 候选块最后分配：剩下的预算放得下几条就放几条，放不下整块略过（目录行的候选计数仍在）。
+      let candidateBlock = '';
+      if (candidates.length) {
+        const two = candidateText(candidates.slice(0, 2));
+        const one = candidateText(candidates.slice(0, 1));
+        if (two.length + 1 <= budget) candidateBlock = two;
+        else if (one.length + 1 <= budget) candidateBlock = one;
+      }
       if (candidateBlock) lines.push(candidateBlock);
       lines.push(tail);
       if (uninitialized) lines.push('记忆笔记本尚未初始化。');
@@ -2339,7 +2548,8 @@ export function createMemoryStore(options) {
     changesSince: (since) => ({ revision, complete: !changes.length || since >= changes[0].revision - 1, entries: changes.filter(entry => entry.revision > since) }),
     handoff: guardConnection(handoff),
     checkup: guardConnection(checkup),
-    collapseTopicDrift: guardConnection(serialize(collapseTopicDrift)),
+    statusCounts: guardConnection(statusCounts),
+    scopes: guardConnection(scopes),
     sectionText,
     invalidateSnapshot,
     /**
