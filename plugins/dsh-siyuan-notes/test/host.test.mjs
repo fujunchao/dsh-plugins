@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { after, test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import * as host from "../lib/index.js";
 // 命名空间导入（而不是命名导入）intentionally：TDD 阶段 `isServableAssetPath` 尚未实现时，
@@ -553,7 +554,7 @@ test("distillRender 失败时说明原因", () => {
 });
 
 test("knownProjects 从真实目录读候选，总是包含 *", async () => {
-  const names = await host.knownProjects(new URL("..", import.meta.url).pathname.replace(/^\//u, ""));
+  const names = await host.knownProjects(fileURLToPath(new URL("..", import.meta.url)));
   assert.ok(names.includes("*"), "跨项目通用值必须在");
   assert.ok(names.includes("dsh-siyuan-notes"), "项目自身必须进入候选");
   assert.ok(!names.includes("lib"), "源码目录不能作为项目");

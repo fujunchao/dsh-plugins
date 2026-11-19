@@ -652,7 +652,8 @@ function sqlString(value) {
 export function imageFileParts(filePath) {
   const raw = typeof filePath === "string" ? filePath.trim() : "";
   if (raw === "") return null;
-  const name = path.basename(raw);
+  // 两种分隔符都认：模型在 Windows 上会传带反斜杠的路径，而宿主也可能跑在 POSIX 上。
+  const name = path.basename(raw.replace(/\\/gu, "/"));
   if (name === "" || name === "." || name === "..") return null;
   const dot = name.lastIndexOf(".");
   const ext = dot > 0 ? name.slice(dot).toLowerCase() : "";
@@ -1035,7 +1036,7 @@ export function createImageInsertTool(deps) {
             },
             value: {
               type: "string",
-              description: "kind=path 时是文件绝对路径（Windows 上写完整盘符路径，例如 Pictures 目录里的 cover.png）；kind=asset 时是资源相对路径（如 assets/cover.png）。",
+              description: "kind=path 时是文件绝对路径（如 ~/Pictures/cover.png）；kind=asset 时是资源相对路径（如 assets/cover.png）。",
             },
           },
           required: ["kind", "value"],
