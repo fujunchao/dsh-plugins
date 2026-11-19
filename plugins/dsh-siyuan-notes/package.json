@@ -20,9 +20,6 @@
     "url": "git+https://github.com/fujunchao/dsh-plugins.git",
     "directory": "plugins/dsh-siyuan-notes"
   },
-  "author": {
-    "name": "Fu Junchao"
-  },
   "license": "MIT",
   "engines": {
     "node": ">=20",

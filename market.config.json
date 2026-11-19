@@ -2,8 +2,8 @@
   "url": "https://fujunchao.github.io/dsh-plugins/index.json",
   "repositoryUrl": "https://github.com/fujunchao/dsh-plugins",
   "title": {
-    "en": "Fujunchao's DSH plugins",
-    "zh": "付俊超的 DSH 插件集"
+    "en": "DSH plugin collection",
+    "zh": "DSH 插件集"
   },
   "description": {
     "en": "DeepSeekRuntime (DSH) plugins for the composer, the model layer, sessions, notes and research workflows.",

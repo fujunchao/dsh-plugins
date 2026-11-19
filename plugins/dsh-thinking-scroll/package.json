@@ -22,9 +22,6 @@
   "bugs": {
     "url": "https://github.com/fujunchao/dsh-plugins/issues"
   },
-  "author": {
-    "name": "Fu Junchao"
-  },
   "license": "MIT",
   "engines": {
     "node": ">=20",

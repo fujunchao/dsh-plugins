@@ -72,7 +72,7 @@ npm run verify:install -- dsh-resume   # 真实 pnpm 安装一次索引里的 gi
 
 ## 说明
 
-- 这些插件原先分散在本机各目录、以 `link:` 方式安装在作者自己的 profile 里；本仓库是它们的公开来源，`dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi` 的独立仓库不再更新。
+- 这些插件原先分散在本机各目录、以 `link:` 方式安装在维护者自己的 profile 里；本仓库是它们的公开来源，`dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi` 的独立仓库不再更新。
 - 市场索引是第三方内容：DSH 只校验格式，不校验声明。本索引由本仓库 CI 生成，安装前请核对确认框里的来源。
 
 ## 许可

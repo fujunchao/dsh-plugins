@@ -17,7 +17,6 @@
     "url": "git+https://github.com/fujunchao/dsh-plugins.git",
     "directory": "plugins/<目录名>"
   },
-  "author": { "name": "Fu Junchao" },
   "license": "MIT",
   "engines": { "node": ">=20", "dsh": ">=0.2.2-rc.3 <0.3.0-0" },
   "main": "lib/index.js",
@@ -80,7 +79,7 @@
 - README 第一行必须是 `# <插件名>`，随后一句话说明；安装段落写成
   「在 DSH 插件页 → 发现 → 添加索引源 → 安装」，不要出现 `D:\`、`C:\Users\<你的名字>` 这类
   本机路径（需要举例时用 `~/.dsh/plugins/...`）。
-- LICENSE 用仓库根目录同一份 MIT 文本（作者 Fu Junchao）。
+- LICENSE 用仓库根目录同一份 MIT 文本，版权行统一写 `Copyright (c) 2026 dsh-plugins contributors`；**不要写个人姓名**，`package.json` 也不要加 `author` 字段（市场卡片是匿名来源）。
 - `.gitignore` 至少包含 `node_modules/`、`*.bak-*`、`.local/`、`dist/`、`coverage/`。
 
 ## 6. 验收

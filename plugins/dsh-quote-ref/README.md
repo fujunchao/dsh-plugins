@@ -167,4 +167,4 @@ Built against the DeepSeekRuntime client architecture: the `@file` / `@session` 
 
 ## License
 
-[MIT](LICENSE) (c) 2026 Fu Junchao
+[MIT](LICENSE) (c) 2026 dsh-plugins contributors

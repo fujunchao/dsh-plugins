@@ -87,7 +87,7 @@ for (const directory of packages) {
   if (typeof manifest.engines?.dsh !== 'string' || semver.validRange(manifest.engines.dsh) === null) {
     fail(directory, 'engines.dsh must be a SemVer range so DSH can check compatibility')
   }
-  for (const field of ['description', 'license', 'homepage', 'keywords', 'author']) {
+  for (const field of ['description', 'license', 'homepage', 'keywords']) {
     if (!manifest[field] || (Array.isArray(manifest[field]) && manifest[field].length === 0)) {
       fail(directory, `package.json needs ${field}`)
     }
