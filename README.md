@@ -49,6 +49,7 @@ scripts/check-packages.mjs 发布前体检：bundle patch、图标、locale、�
 scripts/sync-snapshot.mjs  把工作副本的代码/版本/运行时字段写进 plugins/<name>
 scripts/scrub-snapshot.mjs 把本机脱敏表过一遍已发布的每个文件（含快照自己拥有的）
 scripts/check-drift.mjs    快照与工作副本的漂移门禁（没有本机映射时自动跳过）
+scripts/check-profile-rows.mjs  本机 profile 的 insert 行体检：每行指向的模块还在不在；裸行冒充 bundle 会告警
 scripts/local-sources.mjs  上面两个脚本共用的路径、脱敏与清单工具
 scripts/test-all.mjs       跑零依赖包的测试
 market.sources.example.json 本机映射与脱敏表的样例（真表 market.sources.local.json 不入库）
@@ -71,6 +72,8 @@ npm run verify:install -- dsh-resume   # 真实 pnpm 安装一次索引里的 gi
 
 每个插件有两份副本：`link:` 装进 profile 的**工作副本**（代码与版本的家），和入库的**发布快照** `plugins/<name>`（README/locale/图标/打包字段的家）。约定与所有权见 [PACKAGING.md](PACKAGING.md) 第 6 节。
 
+**唯一的发布口就是这个仓库。** `dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi` 的独立仓库已归档：只读，`git push` 返回 403，它们只作历史存档，不再接收提交。本机 12 个工作副本是**纯目录**（没有 `.git`）；在它们里面 `git init` / `git push` 只会造出第二条血缘，发布内容永远以 `plugins/<name>` 为准。
+
 1. 在**工作副本**里改代码，并按需抬 `version`。
 2. `npm run sync:snapshot` 把代码与版本写进快照（脱敏由 `market.sources.local.json` 里的表负责）。
 3. `npm run scrub:snapshot` 过一遍快照自己拥有的文件；`npm run check:drift` 必须绿——它比的是「快照里的代码与版本」和「你在跑的那一份」，并确认已发布文件里没有本机真值。
@@ -85,7 +88,7 @@ npm run verify:install -- dsh-resume   # 真实 pnpm 安装一次索引里的 gi
 
 ## 说明
 
-- 这些插件原先分散在本机各目录、以 `link:` 方式安装在维护者自己的 profile 里；本仓库是它们的公开来源，`dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi` 的独立仓库不再更新。
+- 这些插件原先分散在本机各目录、以 `link:` 方式安装在维护者自己的 profile 里；本仓库是它们的公开来源。`dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi` 的独立仓库已归档（只读），不再更新，也不要再往里推。
 - 市场索引是第三方内容：DSH 只校验格式，不校验声明。本索引由本仓库 CI 生成，安装前请核对确认框里的来源。
 
 ## 许可

@@ -107,6 +107,18 @@ npm run check:drift                # 门禁：代码/版本/manifest 字段不�
 - 这条约定存在的理由：DSH 的「有新版本」徽标只比两串版本号——索引里的 `version`（来自快照）与 `listBundles()` 报的已装版本（来自 `link:` 的工作副本）。两边各自记账，就会出现「全是自己推上去的，却一半提示有新版本」。
 - `exports` 属于快照：`check:drift` 会核对工作副本声明的入口在快照里都有，缺了算 drift（安装后加载不到），但不会替你改。
 
+### 6.1 工作副本没有版本管理，独立仓库已归档
+
+- 本机 12 个工作副本是**纯目录**（`market.sources.local.json` 只登记绝对路径）。`dsh-quote-ref` 曾是唯一带 `.git` 的一个，2026-11-20 已删除，历史转存为 `~/.dsh/backups/dsh-quote-ref-history-20261120.bundle`。
+- 六个独立仓库（`dsh-quote-ref`、`dsh-image-gen`、`dsh-research-team`、`dsh-session-vault`、`dsh-thinking-scroll`、`dsh-web-search-multi`）全部已归档：只读，`git push` 返回 403。它们只作历史存档；**发布只经本仓库**，不要在工作副本里 `git init` 或另开远端。
+- 发布内容永远以 `plugins/<name>` 为准：工作副本改了但没 `sync:snapshot`、没 push，就等于没发布。
+
+### 6.2 装到本机 profile 之后
+
+- 市场的「已安装」只读两本账：profile `package.json` 的 `dependencies`，和 `dsh.profile.bundles`。包必须**声明 `dsh.bundle`**（或已被选中为 bundle）才会被 `listBundles()` 列出；否则市场判为未安装，Discover 一直显示**安装**，Installed 页里也没有它。
+- 用 profile `cordis.patch.yml` 里的裸 `insert` 行装插件（`name` 直接写包名或 `file://` 路径）属于旧安装法：市场看不见它，目录一搬行就断，而且没有任何报错。想在本机跑工作副本，正确姿势是 `link:` 依赖 + 选中为 bundle，个人端点/模型写进 profile 的 `- id: <行 id>` 覆盖块（`config` 整体替换，不是深合并）。
+- `npm run check:profile`（`scripts/check-profile-rows.mjs`，已接进 `verify`）逐条验证活动 profile 的 `insert` 行还能解析到模块，并对「裸行冒充 bundle」告警；`--strict` 时判红。没有 profile 的机器（CI）自动跳过，所以门禁在两边都成立。
+
 ## 7. 验收
 
 ```powershell
