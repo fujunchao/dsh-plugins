@@ -5,6 +5,9 @@ node_modules/
 docs/index.json
 docs/icons/
 
+# this machine's working copies and the values they must not publish
+market.sources.local.json
+
 # local scratch state
 *.log
 *.tmp

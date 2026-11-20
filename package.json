@@ -11,11 +11,13 @@
   },
   "scripts": {
     "build:index": "node scripts/build-index.mjs",
+    "check:drift": "node scripts/check-drift.mjs",
     "check:index": "node scripts/check-index.mjs",
     "check:packages": "node scripts/check-packages.mjs",
     "refresh:vendor": "node scripts/refresh-vendor.mjs",
+    "sync:snapshot": "node scripts/sync-snapshot.mjs",
     "test": "node scripts/test-all.mjs",
-    "verify": "node scripts/check-packages.mjs && node scripts/test-all.mjs && node scripts/build-index.mjs && node scripts/check-index.mjs",
+    "verify": "node scripts/check-drift.mjs && node scripts/check-packages.mjs && node scripts/test-all.mjs && node scripts/build-index.mjs && node scripts/check-index.mjs",
     "verify:install": "node scripts/verify-git-install.mjs"
   },
   "devDependencies": {

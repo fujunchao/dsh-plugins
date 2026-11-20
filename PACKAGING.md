@@ -82,11 +82,34 @@
 - LICENSE 用仓库根目录同一份 MIT 文本，版权行统一写 `Copyright (c) 2026 dsh-plugins contributors`；**不要写个人姓名**，`package.json` 也不要加 `author` 字段（市场卡片是匿名来源）。
 - `.gitignore` 至少包含 `node_modules/`、`*.bak-*`、`.local/`、`dist/`、`coverage/`。
 
-## 6. 验收
+## 6. 发布：工作副本 → 快照
+
+每个插件在本机有两个副本，它们各有各的所有权，别把一边的东西手工抄到另一边：
+
+| | 路径 | 谁拥有 |
+|---|---|---|
+| 工作副本 | 本机开发目录（`market.sources.local.json` 里登记） | 代码（`lib/`、`src/`；工作副本自带 `test/`/`tests/` 时连同测试）、`version`、`main`/`type`/`bin`、`dsh.client`、新加的依赖 |
+| 发布快照 | `plugins/<name>`（入库、CI 从这里生成索引） | `README`、`docs/`、`locale/`、`icon.svg`、`LICENSE`、`cordis.patch.yml`、`files`、`scripts/` 目录、`package.json` 的 `scripts` 字段、`homepage`/`repository`、`dsh.bundle`/`dsh.market`、`engines`（含 `engines.dsh`）、依赖范围 |
+
+```powershell
+npm run sync:snapshot              # 把工作副本的代码、版本与运行时字段写进快照（顺带脱敏）
+npm run sync:snapshot -- --dry-run # 只看会改什么
+npm run check:drift                # 门禁：快照与工作副本的代码或版本不一致就红
+```
+
+- `market.sources.local.json`（**不入库**）登记「包名 → 工作副本绝对路径」和「真实值 → 发布值」的脱敏表；没有它时 `check:drift` 自动跳过，所以 CI 不用配。
+- 工作副本若是插件管理器装出来的目录（`~/.dsh/plugins/<name>`），它没有版本管理，一次 `dsh plugin update` 或重装就会把它覆盖掉：这种包一旦改动，快照就是唯一可追溯的副本，落盘前先看 `git diff`。想长期养代码，把它换成一个真正的开发目录再登记。
+- 版本只增不减：快照已经发布了更高的版本时，`sync:snapshot` 会把**工作副本**抬到那个版本，绝不把已发布的版本号改小。
+- 依赖表是合并而不是覆盖：快照里选了安装范围的条目保留（工作副本的差异会打 warn），工作副本新加的依赖会被发布出去。`engines` 反过来以快照为准，因为市场用它判断兼容性。
+- 这条约定存在的理由：DSH 的「有新版本」徽标只比两串版本号——索引里的 `version`（来自快照）与 `listBundles()` 报的已装版本（来自 `link:` 的工作副本）。两边各自记账，就会出现「全是自己推上去的，却一半提示有新版本」。
+- `exports` 属于快照：`check:drift` 会核对工作副本声明的入口在快照里都有，缺了算 drift（安装后加载不到），但不会替你改。
+
+## 7. 验收
 
 ```powershell
 node scripts/check-packages.mjs     # 你负责的包必须 0 FAIL
 npm test                            # 在插件目录里跑，必须全绿
+npm run check:drift                 # 只在有工作副本映射的机器上有意义
 ```
 
 `check-packages.mjs` 会扫 `files` 里真正会发布的文件，本机绝对路径（盘符、`/Users/`、`/home/`）

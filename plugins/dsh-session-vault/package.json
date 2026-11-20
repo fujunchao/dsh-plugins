@@ -8,7 +8,8 @@
     "plugin",
     "session-management",
     "archive",
-    "trash"
+    "trash",
+    "deepseek-harness"
   ],
   "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-session-vault",
   "repository": {

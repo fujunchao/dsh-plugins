@@ -1,6 +1,6 @@
 {
   "name": "dsh-thinking-scroll",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "Cap expanded reasoning blocks with a scrollable window in the DeepSeekRuntime web chat",
   "keywords": [
@@ -66,9 +66,8 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-locale",
-        "@deepseek-ai/dsh-client-runtime",
         "@deepseek-ai/dsh-client-ui-settings",
-        "@deepseek-ai/dsh-client-ui-settings-plugins"
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
       ]
     }
   }

@@ -11,7 +11,8 @@
     "sidebar",
     "recent",
     "order",
-    "sorting"
+    "sorting",
+    "deepseek-harness"
   ],
   "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-workspace-recent",
   "repository": {

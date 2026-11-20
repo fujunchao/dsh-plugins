@@ -1,0 +1,10 @@
+{
+  "$comment": "Copy to market.sources.local.json (gitignored) on the machine that publishes. Absolute paths only.",
+  "plugins": {
+    "dsh-model-tuning": "C:/work/dsh-model-tuning",
+    "dsh-session-lens": "C:/work/dsh-session-lens"
+  },
+  "scrub": {
+    "<value that must never be published>": "<the demo value to publish instead>"
+  }
+}

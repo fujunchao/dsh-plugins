@@ -12,7 +12,8 @@
     "notes",
     "markdown",
     "sidebar",
-    "client-plugin"
+    "client-plugin",
+    "deepseek-harness"
   ],
   "homepage": "https://github.com/fujunchao/dsh-plugins/tree/main/plugins/dsh-siyuan-notes",
   "repository": {

@@ -46,7 +46,11 @@ market.config.json         索引标题、描述、分类、仓库地址
 scripts/build-index.mjs    从 package.json + git 提交生成索引
 scripts/check-index.mjs    用 DSH 官方校验器验证索引，并核对版本/引擎声明
 scripts/check-packages.mjs 发布前体检：bundle patch、图标、locale、元数据、绝对路径
+scripts/sync-snapshot.mjs  把工作副本的代码/版本/运行时字段写进 plugins/<name>
+scripts/check-drift.mjs    快照与工作副本的漂移门禁（没有本机映射时自动跳过）
+scripts/local-sources.mjs  上面两个脚本共用的路径、脱敏与清单工具
 scripts/test-all.mjs       跑零依赖包的测试
+market.sources.example.json 本机映射与脱敏表的样例（真表 market.sources.local.json 不入库）
 scripts/verify-git-install.mjs  用 pnpm 真实安装索引里钉住的 git spec（需要已推送的 commit）
 scripts/refresh-vendor.mjs 从本机 DSH 安装包重新取回官方索引校验器
 .github/workflows/publish.yml  体检 → 测试 → 生成索引 → 部署 Pages
@@ -64,9 +68,17 @@ npm run verify:install -- dsh-resume   # 真实 pnpm 安装一次索引里的 gi
 
 ## 发版
 
-1. 改插件目录里的 `version`（以及需要时的 `CHANGELOG`）。
-2. push 到 `main`。
-3. CI 体检 → 测试 → 用当次 `GITHUB_SHA` 生成索引 → 校验 → 部署 Pages。
+每个插件有两份副本：`link:` 装进 profile 的**工作副本**（代码与版本的家），和入库的**发布快照** `plugins/<name>`（README/locale/图标/打包字段的家）。约定与所有权见 [PACKAGING.md](PACKAGING.md) 第 6 节。
+
+1. 在**工作副本**里改代码，并按需抬 `version`。
+2. `npm run sync:snapshot` 把代码与版本写进快照（脱敏由 `market.sources.local.json` 里的表负责）。
+3. `npm run check:drift` 必须绿——它比的就是「快照里的代码与版本」和「你在跑的那一份」。
+4. push 到 `main`。
+5. CI 体检 → 测试 → 用当次 `GITHUB_SHA` 生成索引 → 校验 → 部署 Pages。
+
+版本只增不减：快照发布了更高的版本时，`sync:snapshot` 抬的是工作副本。索引的 `publishTimestamp` 取该插件目录最后一次提交时间；`engines.dsh` 取自 `package.json`，DSH 安装时会再校验一次。
+
+`check:drift` 比的是「`sync:snapshot` 会不会改东西」：代码、版本、以及 `sync:snapshot` 会写出的那份 `package.json` 字段。手改快照里的 `dsh.client`、`main` 或依赖范围同样会红。
 
 索引的 `publishTimestamp` 取该插件目录最后一次提交时间；`engines.dsh` 取自 `package.json`，DSH 安装时会再校验一次。
 
