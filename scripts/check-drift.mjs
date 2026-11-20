@@ -15,8 +15,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
-  exportCoverage, firstDifference, manifestFieldsDiffering, mergeManifest, nextVersion, normaliseEol,
-  ownedDirectories, ownedFiles, readJson, readLocalSources, scrubText, snapshotDirectories,
+  exportCoverage, firstDifference, isText, manifestFieldsDiffering, mergeManifest, nextVersion, normaliseEol,
+  ownedDirectories, ownedFiles, readJson, readLocalSources, scrubText, snapshotDirectories, walkFiles,
 } from './local-sources.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -90,11 +90,17 @@ for (const [name, working] of sources.plugins) {
     }
   }
 
-  for (const [real] of sources.scrub) {
-    for (const relative of snapshotCode) {
-      if (read(path.join(snapshot, relative)).includes(real)) {
-        drift.push(`${name}: ${relative} publishes ${'scrub["' + real + '"]'}; the value must never leave this machine`)
-      }
+  // A real value must not appear anywhere in the published package — not only in the files the
+  // working copy owns: README, docs, locale and the tests the snapshot keeps are published too.
+  const publishedFiles = walkFiles(snapshot)
+  for (const relative of publishedFiles) {
+    const file = path.join(snapshot, relative)
+    const buffer = fs.readFileSync(file)
+    if (!isText(buffer)) continue
+    const text = buffer.toString('utf8')
+    for (const [real] of sources.scrub) {
+      if (!text.includes(real)) continue
+      drift.push(`${name}: ${relative} publishes ${'scrub["' + real + '"]'}; the value must never leave this machine`)
     }
   }
 }

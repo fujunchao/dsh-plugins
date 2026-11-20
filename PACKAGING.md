@@ -94,11 +94,14 @@
 ```powershell
 npm run sync:snapshot              # 把工作副本的代码、版本与运行时字段写进快照（顺带脱敏）
 npm run sync:snapshot -- --dry-run # 只看会改什么
-npm run check:drift                # 门禁：快照与工作副本的代码或版本不一致就红
+npm run scrub:snapshot             # 把脱敏表过一遍「快照自己拥有的」文件（README/docs/locale/…）
+npm run check:drift                # 门禁：代码/版本/manifest 字段不一致，或已发布文件里还有真值，就红
 ```
 
 - `market.sources.local.json`（**不入库**）登记「包名 → 工作副本绝对路径」和「真实值 → 发布值」的脱敏表；没有它时 `check:drift` 自动跳过，所以 CI 不用配。
 - 工作副本若是插件管理器装出来的目录（`~/.dsh/plugins/<name>`），它没有版本管理，一次 `dsh plugin update` 或重装就会把它覆盖掉：这种包一旦改动，快照就是唯一可追溯的副本，落盘前先看 `git diff`。想长期养代码，把它换成一个真正的开发目录再登记。
+- 脱敏分两道：`sync:snapshot` 管它复制的那些文件，`scrub:snapshot` 管快照自己拥有的文件；`check:drift` 最后扫**全部**已发布文件（不只代码），任何真值残留都判红。
+- 测试里的路径不要照抄本机布局：会跟着语料走的就从句柄/桶名推导（`dsh-session-lens` 的 `tests/support/corpus.js` 就是例子），纯合成 fixture 用 `D:\work\…` 这类中性路径。
 - 版本只增不减：快照已经发布了更高的版本时，`sync:snapshot` 会把**工作副本**抬到那个版本，绝不把已发布的版本号改小。
 - 依赖表是合并而不是覆盖：快照里选了安装范围的条目保留（工作副本的差异会打 warn），工作副本新加的依赖会被发布出去。`engines` 反过来以快照为准，因为市场用它判断兼容性。
 - 这条约定存在的理由：DSH 的「有新版本」徽标只比两串版本号——索引里的 `version`（来自快照）与 `listBundles()` 报的已装版本（来自 `link:` 的工作副本）。两边各自记账，就会出现「全是自己推上去的，却一半提示有新版本」。

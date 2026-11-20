@@ -116,7 +116,7 @@ node scripts/e2e-native-editor.mjs
 - 独立复核补齐了上传期间切换／关闭标签、已索引记忆撤销后的旧索引遮罩、引用容器 kramdown 校验、部分落盘后重试、未确认期间继续输入及蒸馏错误上报。
 - 四个变更模块和新增端到端脚本通过 `node --check`；按 Windows CRLF 行尾规则检查修改差异，无新增空白错误或调试日志。
 - 未进行真实浏览器人工点击验收；UI 回归使用实际函数组件配合状态、网络模拟。已核实安装目录链接到本项目，运行中的 Host 仍需重新启用插件或重启 DSH 加载新代码；本轮没有强制中断用户会话。
-- 修复前快照：`D:\augment-projects\cz\.local\dsh-siyuan-fix-20261109-114248`。
+- 修复前快照：`D:\work\cz\.local\dsh-siyuan-fix-20261109-114248`。
 
 > 环境：DSH 桌面版 `0.2.1-rc.5`（Windows 11 x64），profile `desktop`；
 > 思源内核 `3.8.3`，`http://127.0.0.1:6806`（Docker，局域网），笔记本 `20251122094407-b4g4hhx`。
@@ -153,7 +153,7 @@ node scripts/e2e-native-editor.mjs
    （`pnpm config set store-dir D:/tool-cache/pnpm-store --global`，注意写**基础目录**，
    pnpm 自己会拼 `v10`/`v11`）。之后 `install_bundle` 仍走 pnpm 11 会再报 v11 不匹配，
    所以最终用 profile 自带的 pnpm 10 完成链接：
-   `package.json` 加 `"dsh-siyuan-notes": "link:D:/augment-projects/cz/dsh-siyuan-notes"` → `pnpm install --offline`。
+   `package.json` 加 `"dsh-siyuan-notes": "link:D:/work/cz/dsh-siyuan-notes"` → `pnpm install --offline`。
 2. **`install_bundle` 拒绝重复安装**：手工链接后它会返回 `already-installed`。
    行（`cordis.patch.yml`）与依赖（`package.json`）都齐了，插件就已生效，
    不需要再走一次管理器安装。
@@ -2440,10 +2440,10 @@ E2E-IMAGE-TOOL: OK
 ```powershell
 # 卸载：删掉 profile 补丁里的这一块，并去掉 package.json 里的 link 依赖
 # 备份文件已就位：
-#   C:\Users\fujun\.dsh\profiles\desktop\cordis.patch.yml.bak-before-siyuan-notes
-#   C:\Users\fujun\.dsh\profiles\desktop\package.json.bak-before-siyuan-notes
-#   C:\Users\fujun\.dsh\profiles\desktop\pnpm-lock.yaml.bak-before-siyuan-notes
-# 插件保存前快照：C:\Users\fujun\.dsh\siyuan-backups\
+#   C:\Users\demo\.dsh\profiles\desktop\cordis.patch.yml.bak-before-siyuan-notes
+#   C:\Users\demo\.dsh\profiles\desktop\package.json.bak-before-siyuan-notes
+#   C:\Users\demo\.dsh\profiles\desktop\pnpm-lock.yaml.bak-before-siyuan-notes
+# 插件保存前快照：C:\Users\demo\.dsh\siyuan-backups\
 ```
 
 ## 7. 记忆体 v6 修正（2026-11-11）
@@ -2486,8 +2486,8 @@ E2E-IMAGE-TOOL: OK
 
 ```powershell
 # 回退：用改前快照覆盖
-Copy-Item -Recurse -Force D:\augment-projects\cz\.local\memory-v6-20261111\before\lib   D:\augment-projects\cz\dsh-siyuan-notes\
-Copy-Item -Recurse -Force D:\augment-projects\cz\.local\memory-v6-20261111\before\test   D:\augment-projects\cz\dsh-siyuan-notes\
+Copy-Item -Recurse -Force D:\work\cz\.local\memory-v6-20261111\before\lib   D:\work\cz\dsh-siyuan-notes\
+Copy-Item -Recurse -Force D:\work\cz\.local\memory-v6-20261111\before\test   D:\work\cz\dsh-siyuan-notes\
 # 生效：重启 DSH（Host 半边不热加载）；重启后 GET /siyuan/memory 应返回 memoryContractVersion=6
 ```
 
@@ -2536,8 +2536,8 @@ Copy-Item -Recurse -Force D:\augment-projects\cz\.local\memory-v6-20261111\befor
 ### 8.4 回退与生效
 
 ```powershell
-Copy-Item -Recurse -Force D:\augment-projects\cz\.local\memory-v7-20261111\before\lib   D:\augment-projects\cz\dsh-siyuan-notes\
-Copy-Item -Recurse -Force D:\augment-projects\cz\.local\memory-v7-20261111\before\test  D:\augment-projects\cz\dsh-siyuan-notes\
+Copy-Item -Recurse -Force D:\work\cz\.local\memory-v7-20261111\before\lib   D:\work\cz\dsh-siyuan-notes\
+Copy-Item -Recurse -Force D:\work\cz\.local\memory-v7-20261111\before\test  D:\work\cz\dsh-siyuan-notes\
 # 生效：重启 DSH；重启后 GET /siyuan/memory 应返回 memoryContractVersion=7
 ```
 

@@ -6,7 +6,7 @@ import { createExec, createFixtureContext, createFixtureStore } from "./support/
 
 const header = {
   id: "session-caller",
-  cwd: "D:\\augment-projects\\cz",
+  cwd: "D:\\work\\cz",
   createdAt: 1_700_000_000_000,
   version: 4,
   isSeeded: false,
@@ -14,7 +14,7 @@ const header = {
 
 const other = {
   id: "session-other",
-  cwd: "D:\\augment-projects\\dh",
+  cwd: "D:\\work\\dh",
   createdAt: 1_700_000_100_000,
   version: 4,
   isSeeded: false,
@@ -103,7 +103,7 @@ test("端到端：session_read 能读到另一个项目的会话", async () => {
   const { ctx, tools } = createPluginContext();
   apply(ctx, {});
   const output = await tools.get("session_read").execute({ session_id: "session-other", mode: "text" }, createExec(header));
-  assert.ok(output.includes('cwd="D:\\augment-projects\\dh"'), output);
+  assert.ok(output.includes('cwd="D:\\work\\dh"'), output);
   assert.ok(output.includes("你好"), output);
 });
 

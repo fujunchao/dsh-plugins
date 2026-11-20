@@ -155,12 +155,23 @@ describe('ensureDirectoryAbsent 原位守卫', () => {
     leftovers.push(root)
     const dir = join(root, 'session-ghost')
     await mkdir(dir, { recursive: true })
-    // 每 25ms 重建一次，模拟持续写入器；守卫耗尽重试后必须抛错，绝不误报成功。
-    const recreator = setInterval(() => { void mkdir(dir, { recursive: true }).catch(() => {}) }, 25)
+    // 持续写入器：删掉就立刻重建，重建本身串行等待，所以目录「不存在」的窗口只有一次
+    // 异步 mkdir 的耗时（毫秒级），永远撑不满守卫 30ms 的复查窗口。
+    // 这里刻意不用固定间隔的 setInterval：在 Windows 上它与守卫的 rm 抢同一目录时偶发
+    // 打空（EPERM/ENOENT 被 catch 吞掉），守卫便会在两次复查之间看到目录真的不存在，
+    // 于是同一份代码在负载高时红、低时绿。
+    let stopped = false
+    const keepSpawning = (async () => {
+      while (!stopped) {
+        await mkdir(dir, { recursive: true }).catch(() => {})
+        await new Promise((resolve) => setTimeout(resolve, 2))
+      }
+    })()
     try {
       await expect(ensureDirectoryAbsent(dir, { attempts: 3, intervalMs: 30 })).rejects.toMatchObject({ code: 'artifact-resurrected' })
     } finally {
-      clearInterval(recreator)
+      stopped = true
+      await keepSpawning
     }
   })
 })

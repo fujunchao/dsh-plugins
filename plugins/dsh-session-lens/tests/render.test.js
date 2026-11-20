@@ -71,7 +71,7 @@ test("formatTime 不受区域设置影响", () => {
 
 test("围栏头带 cwd / id / ref / 步区间 / 快照点，且提示里没有裸小于号", () => {
   const head = fenceOpen({
-    cwd: "D:\\augment-projects\\dh",
+    cwd: "D:\\work\\dh",
     id: "session-1",
     ref: "dsh-session:abc",
     title: "登录修好了",
@@ -83,7 +83,7 @@ test("围栏头带 cwd / id / ref / 步区间 / 快照点，且提示里没有�
   const note = head.split("\n")[1];
   assert.ok(!note.includes("<"), note);
   for (const fragment of [
-    'cwd="D:\\augment-projects\\dh"',
+    'cwd="D:\\work\\dh"',
     'id="session-1"',
     'ref="dsh-session:abc"',
     'mode="surface"',

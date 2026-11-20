@@ -47,6 +47,7 @@ scripts/build-index.mjs    从 package.json + git 提交生成索引
 scripts/check-index.mjs    用 DSH 官方校验器验证索引，并核对版本/引擎声明
 scripts/check-packages.mjs 发布前体检：bundle patch、图标、locale、元数据、绝对路径
 scripts/sync-snapshot.mjs  把工作副本的代码/版本/运行时字段写进 plugins/<name>
+scripts/scrub-snapshot.mjs 把本机脱敏表过一遍已发布的每个文件（含快照自己拥有的）
 scripts/check-drift.mjs    快照与工作副本的漂移门禁（没有本机映射时自动跳过）
 scripts/local-sources.mjs  上面两个脚本共用的路径、脱敏与清单工具
 scripts/test-all.mjs       跑零依赖包的测试
@@ -72,7 +73,7 @@ npm run verify:install -- dsh-resume   # 真实 pnpm 安装一次索引里的 gi
 
 1. 在**工作副本**里改代码，并按需抬 `version`。
 2. `npm run sync:snapshot` 把代码与版本写进快照（脱敏由 `market.sources.local.json` 里的表负责）。
-3. `npm run check:drift` 必须绿——它比的就是「快照里的代码与版本」和「你在跑的那一份」。
+3. `npm run scrub:snapshot` 过一遍快照自己拥有的文件；`npm run check:drift` 必须绿——它比的是「快照里的代码与版本」和「你在跑的那一份」，并确认已发布文件里没有本机真值。
 4. push 到 `main`。
 5. CI 体检 → 测试 → 用当次 `GITHUB_SHA` 生成索引 → 校验 → 部署 Pages。
 

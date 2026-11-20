@@ -5,12 +5,13 @@ import { DEFAULTS } from "../lib/config.js";
 import { executeRead } from "../lib/read.js";
 import { LensError } from "../lib/errors.js";
 import { createExec, createFixtureContext, createFixtureStore, eventTextOf } from "./support/fixture-store.js";
-import { hasCorpus, loadBucket, pickSessions } from "./support/corpus.js";
+import { hasCorpus, listBuckets, loadBucket, pickSessions } from "./support/corpus.js";
 
-const DH = "--D-augment-projects-dh--";
-const CZ = "--D-augment-projects-cz--";
-const available = hasCorpus();
-
+/** 桶名来自真实 cwd 的编码，跟着语料走，不在包里写死维护者的路径。 */
+const bucketEnding = (suffix) => listBuckets().find((name) => name.endsWith(suffix));
+const DH = bucketEnding("-dh--");
+const CZ = bucketEnding("-cz--");
+const available = hasCorpus() && DH !== undefined && CZ !== undefined;
 const countSteps = (session) => session.events.filter((event) => event.type === "step/start").length;
 
 const dhAll = available ? loadBucket(DH) : [];
@@ -25,7 +26,7 @@ const sessions = available
 const store = available ? createFixtureStore(sessions) : undefined;
 const ctx = available ? createFixtureContext(store) : undefined;
 
-const caller = czSample[0]?.header ?? { id: "session-caller", cwd: "D:\\augment-projects\\cz", createdAt: 0 };
+const caller = czSample[0]?.header ?? { id: "session-caller", cwd: "D:\\work\\cz", createdAt: 0 };
 const exec = createExec(caller);
 const config = { ...DEFAULTS };
 const read = (args, overrides = {}) => executeRead(ctx, { ...config, ...overrides }, args, exec);
@@ -34,7 +35,7 @@ const totalSteps = multi === undefined ? 0 : countSteps(multi);
 test("跨工作区读取只靠点名 session_id 就成立", { skip: !available || multi === undefined }, async () => {
   const output = await read({ session_id: multi.header.id, mode: "outline" });
   assert.ok(output.includes(`id="${multi.header.id}"`), output);
-  assert.ok(output.includes('cwd="D:\\augment-projects\\dh"'), output);
+  assert.ok(output.includes(`cwd="` + multi.header.cwd + `"`), output);
   assert.ok(output.includes('mode="outline"'), output);
   assert.ok(output.includes('snapshot="persisted'), output);
 });

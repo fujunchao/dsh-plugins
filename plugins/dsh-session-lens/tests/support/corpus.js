@@ -74,7 +74,7 @@ export function readSessionFile(file) {
 
 /**
  * 读一个 cwd 桶下的全部会话。
- * @param {string} bucket 桶目录名，例如 `--D-augment-projects-cz--`。
+ * @param {string} bucket 桶目录名，例如 `--D-work-cz--`。
  * @param {string} [root] 会话根目录。
  * @returns {{file: string, header: any, events: any[]}[]} 会话。
  */

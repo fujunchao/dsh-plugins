@@ -5,12 +5,17 @@ import { DEFAULTS } from "../lib/config.js";
 import { executeFind, keepRecords, scopeFilters } from "../lib/find.js";
 import { LensError } from "../lib/errors.js";
 import { createExec, createFixtureContext, createFixtureStore, eventTextOf } from "./support/fixture-store.js";
-import { hasCorpus, pickSessions } from "./support/corpus.js";
+import { hasCorpus, listBuckets, pickSessions } from "./support/corpus.js";
 
-const CZ = "--D-augment-projects-cz--";
-const DH = "--D-augment-projects-dh--";
+/**
+ * 桶名是真实 cwd 的编码（冒号与反斜杠变成短横线），所以从语料里取，不写死：
+ * 本机换目录、CI 上没有语料，都不会把维护者的路径带进这个包。
+ */
+const bucketEnding = (suffix) => listBuckets().find((name) => name.endsWith(suffix));
+const CZ = bucketEnding("-cz--");
+const DH = bucketEnding("-dh--");
 
-const available = hasCorpus();
+const available = hasCorpus() && CZ !== undefined && DH !== undefined;
 const config = { ...DEFAULTS };
 
 const czSessions = available ? pickSessions(CZ, { limit: 3 }) : [];
@@ -67,7 +72,7 @@ test("默认作用域搜不到别的项目", { skip: !available || dhOnlyToken =
 test("scope=all 才跨到别的项目", { skip: !available || dhOnlyToken === "" }, async () => {
   const output = await executeFind(ctx, config, { query: dhOnlyToken, scope: "all", include_subagents: true }, exec);
   assert.ok(output.includes("scope=all"), output);
-  assert.ok(output.includes("D:\\augment-projects\\dh"), output);
+  assert.ok(output.includes(dhSessions[0].header.cwd), output);
   assert.ok(output.includes("ref=dsh-session:"), output);
   assert.ok(output.includes("session_read("), output);
 });

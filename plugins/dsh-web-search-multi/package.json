@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-search-multi",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Multi-backend web search provider for DeepSeekRuntime (Tavily, Grok/xAI, OpenAI, Gemini)",
   "keywords": [
@@ -61,7 +61,7 @@
     "@deepseek-ai/dsh-llm": "^0.1.7-rc.2",
     "@deepseek-ai/dsh-settings": "^0.1.7-rc.2",
     "@deepseek-ai/dsh-web": "^0.1.7-rc.2",
-    "@deepseek-ai/schemastery": "^3.18.4"
+    "@deepseek-ai/schemastery": "~3.18.4"
   },
   "dsh": {
     "bundle": {
